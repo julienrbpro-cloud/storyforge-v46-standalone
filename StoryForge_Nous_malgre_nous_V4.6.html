@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>StoryForge — Nous, malgré nous V4.6</title>
+<style>
+:root{
+  --ink:#0e0c0a; --panel:#181310; --panel2:#221a15;
+  --cream:#f1e9dc; --cream2:#e5dac6; --line:#3a2e24;
+  --orange:#d97b4a; --orange2:#e5925f;
+  --green:#8fb98a; --gray:#b6ad9f; --red:#c96b5e;
+  --serif:Georgia,"Times New Roman",serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:#070605;font-family:var(--sans);color:var(--cream)}
+.app{max-width:430px;margin:0 auto;min-height:100vh;background:var(--ink);position:relative;box-shadow:0 0 80px rgba(0,0,0,.7)}
+.view{display:none;flex-direction:column;min-height:100vh;padding-bottom:74px}
+.view.active{display:flex}
+
+/* ---------- Splash ---------- */
+#splash{align-items:center;justify-content:center;text-align:center;padding:40px 28px;background:radial-gradient(circle at 50% 30%,#1d1510 0%,#0b0908 70%)}
+#splash .logo{width:150px;height:150px;margin-bottom:10px}
+#splash h1{font-family:var(--serif);font-size:46px;margin:6px 0 2px;font-weight:700}
+#splash h1 em{color:var(--orange);font-style:normal}
+#splash .tag{letter-spacing:4px;font-size:11px;color:var(--gray)}
+#splash .rule{width:44px;height:2px;background:var(--orange);margin:26px auto}
+#splash h2{font-family:var(--serif);font-size:30px;line-height:1.2;margin:0 0 18px;font-weight:700}
+#splash p{color:var(--gray);font-size:14px;line-height:1.6;margin:0 0 30px}
+.cta{display:inline-flex;align-items:center;gap:10px;background:var(--orange);color:#160d07;border:0;border-radius:999px;padding:15px 26px;font-size:15px;font-weight:800;cursor:pointer}
+.cta:hover{background:var(--orange2)}
+#splash .foot{margin-top:44px;font-size:10px;letter-spacing:3px;color:#6d6355}
+
+/* ---------- Barres ---------- */
+.topbar{display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--ink);position:sticky;top:0;z-index:9;border-bottom:1px solid var(--line)}
+.topbar .brand{font-family:var(--serif);font-size:26px;font-weight:700;flex:1}
+.topbar .brand em{color:var(--orange);font-style:normal}
+.topbar .sub{font-size:10px;letter-spacing:2px;color:var(--gray);display:block;font-family:var(--sans);font-weight:400}
+.iconbtn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:17px;cursor:pointer;display:grid;place-items:center}
+.iconbtn.orange{background:var(--orange);border-color:var(--orange);color:#160d07;font-weight:800}
+.back{background:none;border:0;color:var(--cream);font-size:22px;cursor:pointer;padding:4px}
+
+/* ---------- Home ---------- */
+.home-body{padding:16px}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 10px}
+.rowhead h3{font-family:var(--serif);font-size:19px;margin:0}
+.rowhead a{color:var(--gray);font-size:12px;text-decoration:none;cursor:pointer}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.cover{height:150px;background:linear-gradient(180deg,#2a1a10 0%,#4a2a16 55%,#1a100a 100%);position:relative}
+.cover svg{width:100%;height:100%;display:block}
+.card .in{padding:14px 16px 16px}
+.card h4{font-family:var(--serif);font-size:22px;margin:0 0 4px}
+.meta{color:var(--gray);font-size:12px;letter-spacing:.4px}
+.bar{height:7px;background:#3b3129;border-radius:99px;margin:12px 0 6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--orange);border-radius:99px}
+.quote{font-family:var(--serif);font-style:italic;color:var(--cream2);font-size:13.5px;line-height:1.5;margin-top:10px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 8px;text-align:center}
+.tile .n{font-size:17px;font-weight:800}
+.tile .l{font-size:11px;color:var(--gray);margin-top:4px}
+.projrow{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;cursor:pointer}
+.projrow .th{width:64px;height:48px;border-radius:8px;background:linear-gradient(160deg,#4a2a16,#1a100a);display:grid;place-items:center;font-family:var(--serif);color:var(--orange);font-size:18px;flex:none}
+.projrow b{font-size:14px;display:block}
+.projrow .bar{margin:7px 0 0}
+
+/* ---------- Nav bas ---------- */
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;display:grid;grid-template-columns:repeat(4,1fr);background:#120e0b;border-top:1px solid var(--line);z-index:10}
+.nav button{background:none;border:0;color:var(--gray);padding:10px 0 12px;font-size:11px;cursor:pointer;display:grid;justify-items:center;gap:4px}
+.nav button .ic{font-size:17px}
+.nav button.on{color:var(--orange)}
+
+/* ---------- Projet ---------- */
+.phead{padding:14px 16px 12px;text-align:center;border-bottom:1px solid var(--line)}
+.phead h2{font-family:var(--serif);font-size:24px;margin:0 0 4px}
+.phead .quote{margin:8px auto 0;max-width:300px}
+.sheet{background:var(--cream);color:#241c14;margin:14px 12px 16px;border-radius:16px;padding:12px 12px 16px;flex:1}
+.tabs{display:flex;gap:4px;border-bottom:2px solid #d8cbb4;margin-bottom:12px}
+.tabs button{flex:1;background:none;border:0;padding:9px 4px;font-size:13px;font-weight:700;color:#7a6c58;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tabs button.on{color:#b4562a;border-bottom-color:var(--orange)}
+.progressline{display:flex;align-items:center;gap:10px;margin:2px 2px 12px}
+.progressline .bar{flex:1;background:#d8cbb4;margin:0}
+.progressline span{font-size:12px;font-weight:700;color:#5d5142;white-space:nowrap}
+.plist{display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;gap:10px;align-items:center;background:#fbf6ec;border:1px solid #e2d6bf;border-radius:12px;padding:8px;cursor:pointer}
+.prow .th{width:56px;height:42px;border-radius:7px;flex:none;background:linear-gradient(160deg,#4a2a16,#1a100a);display:grid;place-items:center;font-family:var(--serif);color:var(--orange);font-size:15px}
+.prow .th img{width:100%;height:100%;object-fit:cover;border-radius:7px}
+.prow .inf{flex:1;min-width:0}
+.prow .inf b{font-size:13.5px;display:block;color:#241c14}
+.prow .inf .u{display:flex;gap:8px;align-items:center;margin-top:5px;font-size:11px;color:#7a6c58}
+.badge{border:0;border-radius:999px;padding:3px 10px;font-size:10.5px;font-weight:800;cursor:pointer}
+.b-afaire{background:#d9d2c6;color:#5d5142}
+.b-brouillon{background:#cfc4b0;color:#4c4132}
+.b-encours{background:#f0c092;color:#7a3d16}
+.b-termine{background:#bcd9b4;color:#2f5229}
+.prow .chev{color:#b0a48d}
+.bigbtn{width:100%;margin-top:12px;background:var(--orange);color:#160d07;border:0;border-radius:999px;padding:14px;font-size:14.5px;font-weight:800;cursor:pointer}
+.bigbtn:hover{background:var(--orange2)}
+.warnchip{background:#f6e3c8;border:1px dashed #c98d4f;color:#7a4a17;border-radius:10px;padding:8px 10px;font-size:11.5px;margin-bottom:10px;line-height:1.45}
+
+/* ---------- Planche ---------- */
+.pl-head{padding:12px 14px 10px;border-bottom:1px solid var(--line)}
+.pl-head h2{font-family:var(--serif);font-size:23px;margin:0}
+.pl-head .sub{color:var(--gray);font-size:12.5px;margin-top:2px}
+.pl-head .top{display:flex;align-items:center;gap:10px}
+.pl-head .top .sp{flex:1}
+.plbody{padding:14px 12px 20px;flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.case{background:var(--cream);color:#241c14;border-radius:12px;overflow:hidden;border:1px solid #00000055;display:flex;flex-direction:column}
+.case .art{position:relative;min-height:150px;background:repeating-linear-gradient(45deg,#efe7d8,#efe7d8 10px,#e6dcc8 10px,#e6dcc8 20px);display:grid;place-items:center}
+.case .art img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;cursor:pointer}
+.case .art .num{position:absolute;top:6px;left:6px;background:#241c14;color:var(--cream);font-size:11px;font-weight:800;border-radius:6px;padding:2px 7px;z-index:2}
+.case .art .addimg{position:absolute;bottom:6px;right:6px;z-index:2;background:#241c14cc;color:var(--cream);border:0;border-radius:7px;font-size:10.5px;padding:4px 7px;cursor:pointer}
+.case .art .ghost{font-family:var(--serif);font-size:34px;color:#c9bba0}
+.bubbles{padding:8px 8px 0;display:flex;flex-direction:column;gap:6px}
+.bub{border-radius:12px;padding:7px 9px;font-size:11.5px;line-height:1.4}
+.bub .who{display:block;font-size:9.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;margin-bottom:3px;opacity:.75}
+.t-dialogue{background:#fff;border:1.5px solid #241c14;border-radius:14px 14px 14px 3px}
+.t-narration{background:#e9dfc9;border:1px dashed #8a7a5f;font-style:italic}
+.t-symbolique{background:#241c14;color:var(--orange2);font-weight:800;letter-spacing:1px;text-transform:uppercase;font-size:10.5px;border-radius:8px;text-align:center}
+.t-ecran{background:#101410;color:#9fe8a0;font-family:"Courier New",monospace;font-size:11px;border-radius:8px}
+.t-repere{background:#d9d2c6;color:#5d5142;font-weight:700;font-size:10.5px;text-align:center;letter-spacing:1px}
+.case .desc{padding:8px 9px;font-size:11px;line-height:1.5;color:#4c4132;flex:1}
+.case .foot{display:flex;flex-wrap:wrap;gap:4px;padding:0 8px 8px}
+.pchip{background:#e2d6bf;border-radius:99px;padding:2px 8px;font-size:9.5px;font-weight:700;color:#5d5142;text-transform:capitalize}
+.schip{margin-left:auto;font-size:9.5px;color:#8a7a5f;font-style:italic}
+.addcase{grid-column:1/-1;border:1.5px dashed #6d6355;background:none;color:var(--gray);border-radius:12px;padding:12px;font-size:13px;cursor:pointer}
+.gcard{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.gcard b{font-size:13px}
+.gcard .opt{color:var(--gray);font-weight:400}
+.gcard p{margin:7px 0 0;font-size:12px;line-height:1.55;color:var(--cream2);white-space:pre-wrap}
+.notecard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.notecard h5{margin:0 0 6px;font-size:12px;color:var(--orange2);letter-spacing:.5px;text-transform:uppercase}
+.notecard p{margin:0 0 8px;font-size:12.5px;line-height:1.55;color:var(--cream2);white-space:pre-wrap}
+.notecard textarea{width:100%;min-height:64px;background:#120e0b;color:var(--cream);border:1px solid var(--line);border-radius:9px;padding:8px;font-size:12px;font-family:var(--sans)}
+.fileline{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 10px;margin-bottom:8px;font-size:12px}
+.fileline .st{margin-left:auto;font-size:10.5px;color:var(--gray)}
+.fileline button{background:var(--panel2);color:var(--cream);border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:11px;cursor:pointer}
+.perscard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 14px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+.perscard .av{width:44px;height:44px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;font-family:var(--serif);color:var(--orange);font-size:19px;flex:none}
+.perscard b{font-size:14px;display:block}
+.perscard span{font-size:11.5px;color:var(--gray)}
+
+/* ---------- Impression ---------- */
+#printArea{display:none}
+@media print{
+  body{background:#fff}
+  .app{max-width:none;box-shadow:none}
+  .view,.nav{display:none!important}
+  #printArea{display:block!important;color:#111;font-family:Georgia,serif}
+  #printArea h1{font-size:24px;margin:0 0 4px}
+  #printArea .psub{font-size:12px;color:#555;margin-bottom:20px}
+  #printArea .pl{page-break-after:always;margin-bottom:24px}
+  #printArea .pl h2{font-size:17px;margin:0 0 2px;border-bottom:2px solid #111;padding-bottom:4px}
+  #printArea .pl .g{font-size:11px;color:#555;margin:4px 0 10px}
+  #printArea .c{border:1.5px solid #111;border-radius:6px;padding:8px 10px;margin-bottom:8px;page-break-inside:avoid}
+  #printArea .c b{font-size:12px}
+  #printArea .c p{margin:4px 0;font-size:11px;line-height:1.45}
+  #printArea .c .tx{margin:2px 0;font-size:11px}
+  #printArea .c .tx i{color:#444}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SPLASH -->
+  <section class="view active" id="splash">
+    <svg class="logo" viewBox="0 0 100 100">
+      <circle cx="50" cy="56" r="29" fill="none" stroke="#d97b4a" stroke-width="3"/>
+      <path d="M50 6 C57 19 62 24 62 32 C62 38 56 42 50 42 C44 42 38 38 38 32 C38 24 43 19 50 6Z" fill="#d97b4a"/>
+      <path d="M50 40 L61 60 L50 80 L39 60 Z" fill="#d97b4a"/>
+      <circle cx="50" cy="60" r="3.4" fill="#0e0c0a"/>
+      <line x1="50" y1="63" x2="50" y2="76" stroke="#0e0c0a" stroke-width="2.4"/>
+    </svg>
+    <h1>Story<em>Forge</em></h1>
+    <div class="tag">HISTOIRES EN CONSTRUCTION</div>
+    <div class="rule"></div>
+    <h2>Donnez forme<br/>à ce qui reste.</h2>
+    <p>Organisez. Imaginez. Dessinez.<br/>Votre manuscrit prend vie.</p>
+    <button class="cta" onclick="go('home')">Entrer dans le studio <span>→</span></button>
+    <div class="foot">DES IDÉES AUX PLANCHES</div>
+  </section>
+
+  <!-- HOME -->
+  <section class="view" id="home">
+    <div class="topbar">
+      <div class="brand">Story<em>Forge</em><span class="sub">CRÉER AUJOURD'HUI LES MONDES DE DEMAIN</span></div>
+      <button class="iconbtn orange" title="Ajouter une planche locale" onclick="addPlanche()">+</button>
+    </div>
+    <div class="home-body">
+      <div class="rowhead"><h3>Projet actif</h3><a onclick="go('project')">Voir tous →</a></div>
+      <div class="card" onclick="go('project')" style="cursor:pointer">
+        <div class="cover">
+          <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice">
+            <rect width="400" height="150" fill="#3a2212"/>
+            <circle cx="255" cy="78" r="46" fill="#d97b4a"/>
+            <path d="M0 118 L30 96 L52 112 L80 90 L110 114 L150 98 L180 116 L220 100 L260 118 L300 102 L340 118 L400 104 L400 150 L0 150Z" fill="#180f09"/>
+            <path d="M60 150 L60 118 Q60 108 68 108 Q76 108 76 118 L76 150Z" fill="#0d0805"/>
+            <circle cx="68" cy="102" r="7" fill="#0d0805"/>
+            <path d="M84 150 L84 120 Q84 110 92 110 Q100 110 100 120 L100 150Z" fill="#0d0805"/>
+            <circle cx="92" cy="104" r="7" fill="#0d0805"/>
+          </svg>
+        </div>
+        <div class="in">
+          <h4>Nous, malgré nous</h4>
+          <div class="meta">Manuscrit technique V4.6 · <span id="hChap"></span></div>
+          <div class="bar"><i id="hBar"></i></div>
+          <div class="meta" id="hProg"></div>
+          <div class="quote">« Et ce qui était si précieux….. »</div>
+        </div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="n" id="tPl">–</div><div class="l">Planches</div></div>
+        <div class="tile"><div class="n" id="tCs">–</div><div class="l">Cases intégrées</div></div>
+        <div class="tile"><div class="n" id="tPe">–</div><div class="l">Personnages</div></div>
+      </div>
+      <div class="rowhead"><h3>Mes projets</h3></div>
+      <div class="projrow" onclick="go('project')">
+        <div class="th">NM</div>
+        <div style="flex:1"><b>Nous, malgré nous — V4.6</b>
+          <div class="meta" id="hSeed"></div>
+          <div class="bar"><i id="hBar2"></i></div>
+        </div>
+      </div>
+    </div>
+    <nav class="nav" id="nav-home"></nav>
+  </section>
+
+  <!-- PROJET -->
+  <section class="view" id="project">
+    <div class="topbar"><button class="back" onclick="go('home')">←</button>
+      <div class="brand" style="font-size:19px">Projets</div>
+      <button class="iconbtn orange" title="Ajouter une planche locale" onclick="addPlanche()">+</button>
+    </div>
+    <div class="phead">
+      <h2>Nous, malgré nous</h2>
+      <div class="meta">Drame intime · Récit autobiographique · Fantastique social</div>
+      <div class="quote">« Et ce qui était si précieux….. »</div>
+    </div>
+    <div class="sheet">
+      <div class="tabs" id="projTabs">
+        <button data-t="planches" class="on">Planches</button>
+        <button data-t="personnages">Personnages</button>
+        <button data-t="notes">Notes</button>
+        <button data-t="fichiers">Fichiers</button>
+      </div>
+      <div id="projContent"></div>
+    </div>
+    <nav class="nav" id="nav-project"></nav>
+  </section>
+
+  <!-- PLANCHE -->
+  <section class="view" id="planche">
+    <div class="pl-head">
+      <div class="top">
+        <button class="back" onclick="go('project')">←</button>
+        <div style="flex:1"><h2 id="plTitle"></h2><div class="sub" id="plSub"></div></div>
+        <button class="badge" id="plBadge" onclick="cycleStatut()"></button>
+        <button class="iconbtn" title="Imprimer cette planche (PDF)" onclick="buildPrint(currentPlancheId);window.print()">⎙</button>
+      </div>
+      <div class="tabs" id="plTabs" style="margin:10px 0 0;border-bottom-color:var(--line)">
+        <button data-t="storyboard" class="on" style="color:var(--gray)">Storyboard</button>
+        <button data-t="notes" style="color:var(--gray)">Notes</button>
+        <button data-t="fichiers" style="color:var(--gray)">Fichiers</button>
+      </div>
+    </div>
+    <div class="plbody" id="plContent"></div>
+  </section>
+
+  <!-- PROFIL -->
+  <section class="view" id="profil">
+    <div class="topbar"><div class="brand" style="font-size:19px">Profil & données</div></div>
+    <div style="padding:16px" id="profilBody"></div>
+    <nav class="nav" id="nav-profil"></nav>
+  </section>
+
+  <div id="printArea"></div>
+</div>
+
+<input type="file" id="pickSeed" accept=".json,application/json" hidden/>
+<input type="file" id="pickProd" accept=".json,application/json" hidden/>
+<input type="file" id="pickImg" accept="image/*" hidden/>
+
+<script>
+/* ============ SEED CANONIQUE PARTIEL (verbatim, extrait du seed officiel V4.6) ============ */
+const TITRES = ["MÉTRO PAPINEAU","LA CLÉ","LES VINGT PREMIÈRES MINUTES","LA FISSURE DANS L'ARMURE","APRÈS SON DÉPART","LA VITESSE SANS PEUR","« TEMPORAIREMENT »","LES JOURS ORDINAIRES","L'AUTOMNE","LE BROUILLARD ET LE A&W","DIRE VRAI SANS HUMILIER","L'AVEU","ACCOMPAGNER ET GUIDER SANS JUGEMENT NI CONDITION","LA COMPLÉTUDE","JE PEUX VENIR FAIRE UN COLLEU?","LES FAÇONS D'AIMER","LE TERRAIN CONNU","LE MIROIR","DEUX VÉRITÉS","LE BOUTON","LA LETTRE","LA PROMESSE ET L'URGENCE","SUNNY !!","RESTE","LA SALLE DE CONTRÔLE","AVOIR PEUR DE SOI","RÉPARER COMMENT?","RELIRE L'HISTOIRE","CE QUI RESTE SANS RETENIR"];
+const G0 = () => ({archiviste:{present:false,niveau:null},armurier:{present:false,niveau:null}});
+const C = (id,num,desc,textes,pers,extra={}) => Object.assign({id,numero:num,titre:extra.titre||null,description:desc,textes:textes||[],personnages:pers||[],statut:"a_valider"},extra);
+const TX = (type,contenu,pid=null,label="texte intégré à la mise en image") => ({type,contenu,personnage_id:pid,source_label:label});
+
+const SEED_PARTIEL = {
+  projet:{titre:"Nous, malgré nous",version:"V4.6",sous_titre:"Ce qui était si précieux…..",nombre_planches:29},
+  personnages:[
+    {id:"julien",nom:"Julien",role:"protagoniste"},
+    {id:"sunny",nom:"Sunny",role:"personnage"},
+    {id:"archiviste",nom:"L'Archiviste",role:"gardien"},
+    {id:"armurier",nom:"L'Armurier",role:"gardien"},
+    {id:"arlo",nom:"Arlo",role:"personnage"}
+  ],
+  planches: TITRES.map((t,i)=>({id:"P"+String(i+1).padStart(2,"0"),numero:i+1,titre:t,
+    chapitre:(i===0?"CHAPITRE 1 — LA PERLE CACHÉE":i===15?"CHAPITRE 4 — LE LIEN PREND SON NOM":i===16?"CHAPITRE 5 — LE CHEMIN CONNU":null),
+    date_histoire:(i===0?"28 juillet 2025":null),
+    gardien_etat:null,instructions_planche:null,notes_planche:null,cases:[]}))
+};
+/* Cases verbatim disponibles dans l'extrait du seed */
+SEED_PARTIEL.planches[0].gardien_etat = G0();
+SEED_PARTIEL.planches[0].cases = [C("P01-1","1","Case divisée en deux. D'un côté, Julien est sur son téléphone. De l'autre, Sunny est sur son téléphone. Ils sont encore chacun dans leur espace et ne se connaissent pas physiquement.",[],["julien","sunny"])];
+SEED_PARTIEL.planches[2].cases = [C("P03-3","3","Le gardien de Julien s'approche immédiatement. Il ouvre la porte et tend à Julien une petite pancarte :",[TX("texte_symbolique","FAIS-LE PARTIR")],["julien","archiviste"])];
+SEED_PARTIEL.planches[6].gardien_etat = {archiviste:{present:true,niveau:1},armurier:{present:true,niveau:1}};
+SEED_PARTIEL.planches[6].cases = [
+  C("P07-1","1","Sunny arrive chez Julien avec quelques sacs.",[],["sunny"]),
+  C("P07-4","4","Julien aménage des espaces précis pour les objets de Sunny. Il libère une tablette, une partie d'un placard, un espace pour les livres, un espace pour les sacs et une partie de la salle de bain. L'Archiviste mesure les espaces et pose de petites étiquettes exactes. Sa silhouette reste humaine; sa tunique est seulement moins impeccable et la lumière de sa lampe légèrement moins nette. Les objets sont encore propres et fonctionnels. Les étiquettes ne sont pas agressives. Sunny observe les espaces créés. Il tient encore un sac dans ses mains. Il ne doit ni sourire pleinement ni refermer son armure. Son expression reste difficile à lire.",[TX("narration_interieure","Tu peux rester sans que je disparaisse.","julien","Narration intérieure de Julien")],["julien","sunny","archiviste"])
+];
+SEED_PARTIEL.planches[7].cases = [C("P08-5","5","Petite case autonome. Sunny regarde Julien avec ses chaînes et bijoux.",[TX("dialogue","rack à bijoux","sunny","Sunny")],["sunny"],{titre:"RACK À BIJOUX"})];
+SEED_PARTIEL.planches[15].gardien_etat = G0();
+SEED_PARTIEL.planches[15].instructions_planche = "La planche est restructurée en souvenirs visuels autonomes. Aucun gardien. Aucune narration visible.";
+SEED_PARTIEL.planches[15].notes_planche = ["NOTE DE CONTINUITÉ — NON DESTINÉE AU LETTRAGE\nLeur amour n'était pas une invention produite par le chaos. Il existait dans les gestes, dans les corps, dans les repas et dans les phrases trop simples pour avoir été fabriquées."];
+SEED_PARTIEL.planches[15].cases = [C("P16-5B","5B","Sunny travaille sur le même tapis. Il peint autour de la tache et transforme progressivement l'objet en pièce extrêmement colorée. Utiliser la photo fournie pour respecter la posture, le type de tapis, l'intensité des couleurs et la gestuelle artistique. L'objet final doit clairement être le même tapis.",[],["sunny"])];
+SEED_PARTIEL.planches[17].gardien_etat = G0();
+SEED_PARTIEL.planches[17].cases = [C("P18-1","1","Julien écrit une longue lettre à la main. Elle est sévère, précise et remplie de petits cœurs.",[],["julien"])];
+SEED_PARTIEL.planches[24].cases = [C("P25-2E","2E","Une porte fermée. Les mots PARS et RESTE sont visibles sur deux feuilles différentes. L'objet lancé, l'objet cassé, le hurlement et les textos ne sont pas répétés dans cette case.",[TX("texte_symbolique","PARS"),TX("texte_symbolique","RESTE")],[])];
+SEED_PARTIEL.planches[26].cases = [C("P27-2","2","Julien lit la lettre et pleure. La lettre produit une lumière réelle. L'Archiviste ferme momentanément certains dossiers. Sa silhouette reste recroquevillée et marquée, mais les proportions sous la tunique commencent à redevenir humaines. La capuche demeure profonde; les mains restent noueuses. Une lumière faible revient dans la lampe et les dossiers cessent de produire autant de lectures contradictoires. La question de Julien occupe le centre de la case, entre la lettre éclairée et les dossiers encore marqués. Aucune méthode de réparation n'apparaît dans l'image.",[TX("dialogue","Je te crois quand tu dis que tu veux réparer. Mais comment?","julien","Julien")],["julien","archiviste"])];
+SEED_PARTIEL.planches[27].cases = [C("P28-2","2","Après la séparation ou vers la fin du processus, un dossier ancien resté fermé s'ouvre. Son étiquette est INFORMATIONS ARRIVÉES PLUS TARD. Ne pas écrire précisément les tromperies ou les détails absents du manuscrit. L'Archiviste est encore fatigué et physiquement marqué. Sa silhouette a retrouvé des proportions humaines; sa tunique reste usée, sa capuche moins profonde et ses mains encore légèrement noueuses. Une lumière faible mais claire revient dans la lampe. Les dossiers, rubans et étiquettes portent des traces de leur dégradation, mais recommencent à produire un classement cohérent. Il éclaire plusieurs anciennes scènes déjà dessinées : téléphone; brouillard; soupçons; incohérences; départs; silences. Les scènes ne doivent pas être redessinées comme entièrement fausses; leur classement change légèrement. Julien ne paraît pas satisfait d'avoir eu raison. Il paraît fatigué et bouleversé par la nécessité de reconstruire le passé.",[TX("texte_symbolique","INFORMATIONS ARRIVÉES PLUS TARD")],["julien","archiviste"])];
+
+/* ============ ÉTAT LOCAL ============ */
+let SEED = SEED_PARTIEL, seedComplet = false;
+let META = {statuts:{}, notes:{}};          // statuts de planche + notes de production par case
+let IMAGES = {};                            // caseId -> dataURL
+let currentPlancheId = null, projTab = "planches", plTab = "storyboard", imgTarget = null;
+const STATUTS = [["a_faire","À faire","b-afaire"],["brouillon","Brouillon","b-brouillon"],["en_cours","En cours","b-encours"],["termine","Terminé","b-termine"]];
+
+function load(){
+  try{ META = JSON.parse(localStorage.getItem("sf46-meta")) || META; }catch(e){}
+  try{ IMAGES = JSON.parse(localStorage.getItem("sf46-images")) || {}; }catch(e){}
+  try{ const s = localStorage.getItem("sf46-seed"); if(s){ SEED = JSON.parse(s); seedComplet = true; } }catch(e){}
+}
+function saveMeta(){ try{ localStorage.setItem("sf46-meta", JSON.stringify(META)); }catch(e){} }
+function saveImages(){ try{ localStorage.setItem("sf46-images", JSON.stringify(IMAGES)); return true; }catch(e){ alert("Quota local atteint : les images restent en mémoire pour cette session. Exportez le JSON de production (Profil) pour les conserver."); return false; } }
+function persist(){ try{ localStorage.setItem("sf46-seed", JSON.stringify(SEED)); seedComplet = true; }catch(e){} }
+
+/* ============ NAVIGATION ============ */
+function go(v){ document.querySelectorAll(".view").forEach(x=>x.classList.remove("active")); document.getElementById(v).classList.add("active");
+  if(v==="home") renderHome(); if(v==="project") renderProject(); if(v==="profil") renderProfil();
+  document.querySelectorAll(".nav").forEach(n=>n.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.v===v)));
+  window.scrollTo(0,0);
+}
+const NAV = [["home","🏠","Accueil"],["project","🗂","Planches"],["project2","📖","Personnages"],["profil","👤","Profil"]];
+function buildNavs(){
+  [["nav-home","home"],["nav-project","project"],["nav-profil","profil"]].forEach(([id,cur])=>{
+    document.getElementById(id).innerHTML = NAV.map(([v,ic,lb])=>{
+      const target = v==="project2" ? "personnages" : v;
+      return `<button data-v="${cur===v||((v==='project')&&cur==='project')?v:''}" class="${cur===v?'on':''}" onclick="${v==='project2'?`go('project');setProjTab('personnages')`:`go('${v}')`}"><span class="ic">${ic}</span>${lb}</button>`;
+    }).join("");
+  });
+}
+
+/* ============ HELPERS ============ */
+const caseCount = p => (p.cases||[]).length;
+const totalCases = () => SEED.planches.reduce((n,p)=>n+caseCount(p),0);
+const statutOf = id => META.statuts[id] || "a_faire";
+function badgeHTML(id){ const s = STATUTS.find(x=>x[0]===statutOf(id)); return `<button class="badge ${s[2]}" onclick="event.stopPropagation();cycleStatut('${id}')">${s[1]}</button>`; }
+function cycleStatut(id){ id = id || currentPlancheId; const i = STATUTS.findIndex(x=>x[0]===statutOf(id)); META.statuts[id] = STATUTS[(i+1)%4][0]; saveMeta(); refresh(); }
+function doneCount(){ return SEED.planches.filter(p=>statutOf(p.id)==="termine").length; }
+function firstImage(p){ for(const c of p.cases||[]) if(IMAGES[c.id]) return IMAGES[c.id]; return null; }
+function refresh(){ renderHome(); if(document.getElementById("project").classList.contains("active")) renderProject();
+  if(document.getElementById("planche").classList.contains("active")) renderPlanche(currentPlancheId); }
+
+/* ============ HOME ============ */
+function renderHome(){
+  const done = doneCount(), n = SEED.planches.length, pct = Math.round(done/n*100);
+  document.getElementById("hBar").style.width = pct+"%";
+  document.getElementById("hBar2").style.width = pct+"%";
+  document.getElementById("hProg").textContent = `${done} / ${n} planches terminées`;
+  document.getElementById("tPl").textContent = `${n}`;
+  document.getElementById("tCs").textContent = totalCases();
+  document.getElementById("tPe").textContent = SEED.personnages.length;
+  document.getElementById("hSeed").textContent = seedComplet ? "Seed canonique complet importé" : `Seed partiel : ${totalCases()} cases verbatim intégrées`;
+  document.getElementById("hChap").textContent = "29 planches";
+}
+
+/* ============ PROJET ============ */
+function setProjTab(t){ projTab = t; document.querySelectorAll("#projTabs button").forEach(b=>b.classList.toggle("on", b.dataset.t===t)); renderProject(); }
+function renderProject(){
+  document.querySelectorAll("#projTabs button").forEach(b=>b.classList.toggle("on", b.dataset.t===projTab));
+  const el = document.getElementById("projContent");
+  if(projTab==="planches"){
+    el.innerHTML = (seedComplet?"":`<div class="warnchip">Seed partiel chargé : ${totalCases()} cases verbatim sur 150. Onglet <b>Fichiers → Importer le JSON officiel</b> pour intégrer l'intégralité du manuscrit, sans rien réécrire.</div>`)
+    + `<div class="progressline"><div class="bar"><i style="width:${Math.round(doneCount()/SEED.planches.length*100)}%"></i></div><span>${doneCount()} / ${SEED.planches.length} planches</span></div>
+    <div class="plist">` + SEED.planches.map(p=>{
+      const img = firstImage(p);
+      return `<div class="prow" onclick="openPlanche('${p.id}')">
+        <div class="th">${img?`<img src="${img}"/>`:String(p.numero).padStart(2,"0")}</div>
+        <div class="inf"><b>${p.titre}</b><div class="u">${badgeHTML(p.id)}<span>${caseCount(p)} case${caseCount(p)>1?"s":""}</span>${p.chapitre?`<span>· ${p.chapitre.split("—")[0].trim()}</span>`:""}</div></div>
+        <span class="chev">⋯</span></div>`;
+    }).join("") + `</div><button class="bigbtn" onclick="addPlanche()">+ Nouvelle planche (locale)</button>`;
+  }
+  else if(projTab==="personnages"){
+    el.innerHTML = SEED.personnages.map(p=>`<div class="perscard" style="background:#fbf6ec;border-color:#e2d6bf;color:#241c14">
+      <div class="av" style="background:#e2d6bf;color:#b4562a;border-color:#d8cbb4">${(p.nom||p.id)[0]}</div>
+      <div><b>${p.nom||p.id}</b><span>${p.role||"personnage"}</span></div></div>`).join("");
+  }
+  else if(projTab==="notes"){
+    const withNotes = SEED.planches.filter(p=>p.instructions_planche||((p.notes_planche||[]).length));
+    el.innerHTML = withNotes.length ? withNotes.map(p=>`<div class="notecard" style="background:#fbf6ec;border-color:#e2d6bf">
+      <h5 style="color:#b4562a">P${String(p.numero).padStart(2,"0")} — ${p.titre}</h5>
+      ${p.instructions_planche?`<p><b>Instructions :</b> ${p.instructions_planche}</p>`:""}
+      ${(p.notes_planche||[]).map(n=>`<p>${n}</p>`).join("")}</div>`).join("")
+      : `<div class="warnchip">Aucune note de planche dans le seed chargé. Importez le JSON officiel pour les récupérer.</div>`;
+  }
+  else { // fichiers
+    el.innerHTML = `
+      <div class="fileline">📄 <b>Seed canonique officiel</b><span class="st">${seedComplet?"complet":"partiel"}</span><button onclick="document.getElementById('pickSeed').click()">Importer</button></div>
+      <div class="fileline">🖼 <b>Images de cases</b><span class="st">${Object.keys(IMAGES).length} jointe(s)</span><button onclick="setProjTab('planches')">Voir</button></div>
+      <div class="fileline">💾 <b>Sauvegarde production</b><span class="st">meta + images</span><button onclick="exportProd()">Exporter</button><button onclick="document.getElementById('pickProd').click()">Restaurer</button></div>
+      <div class="fileline">⎙ <b>Storyboard complet</b><span class="st">PDF via impression</span><button onclick="buildPrint(null);window.print()">Imprimer</button></div>`;
+  }
+}
+
+/* ============ PLANCHE ============ */
+function openPlanche(id){ currentPlancheId = id; plTab = "storyboard"; go("planche"); renderPlanche(id); }
+function setPlTab(t){ plTab = t; renderPlanche(currentPlancheId); }
+function renderPlanche(id){
+  const p = SEED.planches.find(x=>x.id===id); if(!p) return;
+  document.querySelectorAll("#plTabs button").forEach(b=>{ b.classList.toggle("on", b.dataset.t===plTab); b.style.color = b.dataset.t===plTab ? "var(--orange)" : "var(--gray)"; });
+  document.getElementById("plTitle").textContent = "Planche " + String(p.numero).padStart(2,"0");
+  document.getElementById("plSub").textContent = p.titre + (p.chapitre?` · ${p.chapitre}`:"") + (p.date_histoire?` · ${p.date_histoire}`:"");
+  const s = STATUTS.find(x=>x[0]===statutOf(p.id)); const bd = document.getElementById("plBadge"); bd.className = "badge "+s[2]; bd.textContent = s[1];
+  const el = document.getElementById("plContent");
+  if(plTab==="storyboard"){
+    el.innerHTML = `<div class="grid2">` + (p.cases||[]).map(c=>{
+      const imgs = IMAGES[c.id];
+      const bubbles = (c.textes||[]).map(t=>{
+        const cls = {dialogue:"t-dialogue",narration_interieure:"t-narration",texte_symbolique:"t-symbolique",texte_ecran:"t-ecran",repere_temporel:"t-repere"}[t.type]||"t-narration";
+        const who = t.type==="dialogue"&&t.personnage_id?`<span class="who">${t.personnage_id}</span>`: t.type==="narration_interieure"?`<span class="who">narration</span>`:"";
+        return `<div class="bub ${cls}">${who}${t.contenu}</div>`;
+      }).join("");
+      return `<div class="case">
+        <div class="art">${imgs?`<img src="${imgs}" onclick="pickImage('${c.id}')"/>`:`<span class="ghost">${c.numero}</span>`}
+          <span class="num">${c.numero}</span><button class="addimg" onclick="pickImage('${c.id}')">${imgs?"changer":"+ image"}</button></div>
+        ${bubbles?`<div class="bubbles">${bubbles}</div>`:""}
+        <div class="desc">${c.description||"<i>Case locale — cliquez Fichiers pour documenter.</i>"}</div>
+        <div class="foot">${(c.personnages||[]).map(x=>`<span class="pchip">${x}</span>`).join("")}<span class="schip">${c.statut||""}</span></div>
+      </div>`;
+    }).join("") + `<button class="addcase" onclick="addCase('${p.id}')">+ Ajouter une case</button></div>
+    <div class="gcard"><b>Dialogue global</b> <span class="opt">(optionnel)</span>
+      <p>${p.instructions_planche || (p.notes_planche||[]).join("\n\n") || "Aucune instruction de planche dans le seed chargé. Importez le JSON officiel (Projet → Fichiers) pour la récupérer."}</p></div>`;
+  }
+  else if(plTab==="notes"){
+    const note = META.notes[p.id] || "";
+    el.innerHTML = `
+      ${p.instructions_planche?`<div class="notecard"><h5>Instructions planche</h5><p>${p.instructions_planche}</p></div>`:""}
+      ${(p.notes_planche||[]).map(n=>`<div class="notecard"><h5>Note canonique</h5><p>${n}</p></div>`).join("")}
+      <div class="notecard"><h5>Note de production (locale)</h5>
+        <textarea oninput="META.notes['${p.id}']=this.value;saveMeta()" placeholder="Repères de dessin, références, à faire…">${note}</textarea></div>
+      ${(p.cases||[]).filter(c=>c.notes).map(c=>`<div class="notecard"><h5>Case ${c.numero}</h5><p>${c.notes}</p></div>`).join("")}`;
+  }
+  else {
+    el.innerHTML = (p.cases||[]).map(c=>`<div class="fileline">🖼 Case ${c.numero}<span class="st">${IMAGES[c.id]?"image jointe":"sans image"}</span>
+      <button onclick="pickImage('${c.id}')">${IMAGES[c.id]?"changer":"ajouter"}</button>
+      ${IMAGES[c.id]?`<button onclick="delete IMAGES['${c.id}'];saveImages();renderPlanche('${p.id}')">retirer</button>`:""}</div>`).join("")
+      + `<div class="fileline">⎙ Imprimer la planche<span class="st">PDF</span><button onclick="buildPrint('${p.id}');window.print()">OK</button></div>`;
+  }
+}
+function addCase(pid){ const p = SEED.planches.find(x=>x.id===pid); const n = (p.cases||[]).length+1;
+  p.cases.push({id:"local-"+pid+"-"+n+"-"+Date.now(),numero:String(n),titre:null,description:"",textes:[],personnages:[],statut:"local",local:true});
+  persist(); renderPlanche(pid); }
+function addPlanche(){ const n = SEED.planches.length+1;
+  SEED.planches.push({id:"local-P"+n+"-"+Date.now(),numero:n,titre:"Planche locale "+n,chapitre:null,date_histoire:null,gardien_etat:null,instructions_planche:null,notes_planche:null,cases:[]});
+  persist(); refresh(); go("project"); }
+
+/* ============ IMAGES ============ */
+function pickImage(caseId){ imgTarget = caseId; document.getElementById("pickImg").click(); }
+document.getElementById("pickImg").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f||!imgTarget) return;
+  try{
+    const url = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f); });
+    const img = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+    const max=1600, sc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+    const cv=document.createElement("canvas"); cv.width=Math.round(img.naturalWidth*sc); cv.height=Math.round(img.naturalHeight*sc);
+    const cx=cv.getContext("2d"); cx.fillStyle="#fff"; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(img,0,0,cv.width,cv.height);
+    IMAGES[imgTarget]=cv.toDataURL("image/jpeg",0.85); saveImages(); refresh(); if(currentPlancheId) renderPlanche(currentPlancheId);
+  }catch(err){ alert("Image illisible."); }
+  e.target.value="";
+});
+
+/* ============ IMPORT SEED OFFICIEL ============ */
+function findPlanches(o){ if(!o||typeof o!=="object") return null;
+  if(Array.isArray(o.planches)&&o.planches.some(p=>p&&p.cases)) return o.planches;
+  for(const k in o){ const r=findPlanches(o[k]); if(r) return r; } return null; }
+document.getElementById("pickSeed").addEventListener("change", async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());
+    const pl = findPlanches(data); if(!pl) throw 0;
+    const pers = data.personnages || (findPlanches.__p) || SEED.personnages;
+    SEED = {projet:data.projet||SEED_PARTIEL.projet, personnages:Array.isArray(pers)?pers:SEED.personnages, planches:pl};
+    persist(); seedComplet = true; refresh(); renderProject();
+    alert(`Seed officiel intégré : ${pl.length} planches, ${pl.reduce((n,p)=>n+(p.cases||[]).length,0)} cases.`);
+  }catch(err){ alert("JSON officiel illisible."); }
+  e.target.value="";
+});
+
+/* ============ SAUVEGARDE PRODUCTION ============ */
+function exportProd(){
+  const blob = new Blob([JSON.stringify({meta:META,images:IMAGES},null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="storyforge-production.json"; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+document.getElementById("pickProd").addEventListener("change", async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); if(d.meta) META=d.meta; if(d.images){ IMAGES=d.images; saveImages(); } saveMeta(); refresh(); alert("Production restaurée."); }
+  catch(err){ alert("Fichier invalide."); }
+  e.target.value="";
+});
+
+/* ============ IMPRESSION PDF ============ */
+function buildPrint(plancheId){
+  const pls = plancheId ? SEED.planches.filter(p=>p.id===plancheId) : SEED.planches;
+  const tx = t => { const lb={dialogue:"Dialogue",narration_interieure:"Narration int.",texte_symbolique:"Symbolique",texte_ecran:"Écran",repere_temporel:"Repère"}[t.type]||t.type;
+    return `<div class="tx"><i>${lb}${t.personnage_id?" "+t.personnage_id:""} :</i> ${t.contenu}</div>`; };
+  document.getElementById("printArea").innerHTML =
+    `<h1>Nous, malgré nous — V4.6</h1><div class="psub">Storyboard de production · ${pls.length} planche(s) · ${SEED.projet.sous_titre||""}</div>` +
+    pls.map(p=>`<div class="pl"><h2>Planche ${String(p.numero).padStart(2,"0")} — ${p.titre}</h2>
+      <div class="g">${p.chapitre||""}${p.date_histoire?" · "+p.date_histoire:""}${p.gardien_etat?` · Archiviste : ${p.gardien_etat.archiviste.present?"présent, niveau "+p.gardien_etat.archiviste.niveau:"absent"} / Armurier : ${p.gardien_etat.armurier.present?"présent, niveau "+p.gardien_etat.armurier.niveau:"absent"}`:""}</div>
+      ${(p.instructions_planche?`<p><b>Instructions :</b> ${p.instructions_planche}</p>`:"")+(p.notes_planche||[]).map(n=>`<p><b>Note :</b> ${n}</p>`).join("")}
+      ${(p.cases||[]).map(c=>`<div class="c"><b>Case ${c.numero}${c.titre?" — "+c.titre:""}</b>
+        ${c.description?`<p>${c.description}</p>`:""}${(c.textes||[]).map(tx).join("")}
+        ${(c.personnages||[]).length?`<p><i>Personnages : ${c.personnages.join(", ")}</i></p>`:""}</div>`).join("")}
+    </div>`).join("");
+}
+
+/* ============ PROFIL ============ */
+function renderProfil(){
+  document.getElementById("profilBody").innerHTML = `
+    <div class="notecard"><h5>État du manuscrit</h5><p>${seedComplet?"Seed canonique complet":"Seed partiel"} · ${SEED.planches.length} planches · ${totalCases()} cases intégrées · ${Object.keys(IMAGES).length} image(s).</p></div>
+    <div class="fileline">📄 Importer le seed officiel<span class="st">.json</span><button onclick="document.getElementById('pickSeed').click()">Choisir</button></div>
+    <div class="fileline">💾 Exporter la production<span class="st">meta + images</span><button onclick="exportProd()">Exporter</button></div>
+    <div class="fileline">📥 Restaurer la production<span class="st">.json</span><button onclick="document.getElementById('pickProd').click()">Choisir</button></div>
+    <div class="fileline">⎙ Storyboard complet en PDF<span class="st">impression</span><button onclick="buildPrint(null);window.print()">Imprimer</button></div>
+    <div class="fileline">🧹 Réinitialiser statuts & notes<span class="st">local</span><button onclick="if(confirm('Effacer statuts et notes locales ?')){META={statuts:{},notes:{}};saveMeta();refresh();renderProfil();}">OK</button></div>`;
+}
+
+/* ============ INIT ============ */
+buildNavs(); load();
+document.querySelectorAll("#projTabs button").forEach(b=>b.onclick=()=>setProjTab(b.dataset.t));
+document.querySelectorAll("#plTabs button").forEach(b=>b.onclick=()=>setPlTab(b.dataset.t));
+renderHome();
+</script>
+</body>
+</html>
