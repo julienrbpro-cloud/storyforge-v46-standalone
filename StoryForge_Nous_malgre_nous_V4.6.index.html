@@ -399,6 +399,16 @@ const OFFICIAL_REFS = [{"id":"ref-sunny","entityId":"sunny","name":"Sunny — r�
 let SEED = clone(SEED_OFFICIEL);
 let META = {statuts:{},notes:{},filters:{q:"",chapitre:"",personnage:"",gardien:"",statut:""}};
 let MEDIA_META = {};
+const BUILTIN_MEDIA = Object.freeze({"builtin-p01-1":"assets/P01-1-final.png"});
+function ensureBuiltinMedia(){
+  const key=ownerKey("case","P01-1"),id="builtin-p01-1";
+  MEDIA_META[key] ||= [];
+  if(!MEDIA_META[key].some(m=>m.id===id)){
+    MEDIA_META[key].forEach(m=>m.active=false);
+    MEDIA_META[key].unshift({id,name:"Planche 1 — Case 1 — image finale",kind:"final",createdAt:"2026-09-16T00:00:00.000Z",active:true,builtin:true});
+    saveMediaMeta();
+  }
+}
 let currentPlancheId = null, projTab = "planches", plTab = "storyboard";
 let mediaTarget = null, refTarget = null, draggedPlancheId = null;
 const URL_CACHE = new Map();
@@ -469,7 +479,7 @@ async function dbGet(id){ const db=await openDB(); return new Promise((res,rej)=
 async function dbDelete(id){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction("media","readwrite"); tx.objectStore("media").delete(id); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
 async function dbAll(){ const db=await openDB(); return new Promise((res,rej)=>{ const q=db.transaction("media").objectStore("media").getAll(); q.onsuccess=()=>res(q.result||[]); q.onerror=()=>rej(q.error); }); }
 async function dbClear(){ const db=await openDB(); return new Promise((res,rej)=>{ const tx=db.transaction("media","readwrite"); tx.objectStore("media").clear(); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
-async function mediaUrl(id){ if(URL_CACHE.has(id)) return URL_CACHE.get(id); const rec=await dbGet(id); if(!rec?.blob) return null; const u=URL.createObjectURL(rec.blob); URL_CACHE.set(id,u); return u; }
+async function mediaUrl(id){ if(BUILTIN_MEDIA[id]) return BUILTIN_MEDIA[id]; if(URL_CACHE.has(id)) return URL_CACHE.get(id); const rec=await dbGet(id); if(!rec?.blob) return null; const u=URL.createObjectURL(rec.blob); URL_CACHE.set(id,u); return u; }
 function revokeMediaUrl(id){ const u=URL_CACHE.get(id); if(u) URL.revokeObjectURL(u); URL_CACHE.delete(id); }
 function dataUrlToBlob(data){ const [head,body]=data.split(","); const mime=(head.match(/data:([^;]+)/)||[])[1]||"image/jpeg"; const bytes=atob(body); const arr=new Uint8Array(bytes.length); for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i); return new Blob([arr],{type:mime}); }
 function blobToDataUrl(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsDataURL(blob); }); }
@@ -819,7 +829,7 @@ function renderProfil(){
 }
 function resetWorkingSeed(){ if(!confirm("Annuler toutes les modifications de texte, structure, statuts et notes ? Les images seront conservées."))return;SEED=clone(SEED_OFFICIEL);META={statuts:{},notes:{},filters:{q:"",chapitre:"",personnage:"",gardien:"",statut:""}};persist();refresh();toast("Seed canonique restauré"); }
 
-buildNavs();load();
+buildNavs();load();ensureBuiltinMedia();
 document.querySelectorAll("#projTabs button").forEach(b=>b.onclick=()=>setProjTab(b.dataset.t));
 document.querySelectorAll("#plTabs button").forEach(b=>b.onclick=()=>setPlTab(b.dataset.t));
 (async()=>{try{await openDB();await migrateLegacyImages();}catch(e){alert("IndexedDB indisponible : les images ne pourront pas être conservées.");}renderHome();})();
