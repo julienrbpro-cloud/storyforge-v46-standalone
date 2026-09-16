@@ -2,7 +2,8 @@
 (() => {
   'use strict';
 
-  const PATCH_VERSION = '4.6-image-editor-1';
+  const PATCH_VERSION = '4.6-image-editor-2';
+  const P01_IMAGE = './assets/bd/p01/c01.jpg';
 
   function canonicalCase(pid, cid) {
     return (SEED_OFFICIEL.planches.find(p => p.id === pid)?.cases || []).find(c => c.id === cid);
@@ -12,7 +13,7 @@
     for (const p0 of SEED_OFFICIEL.planches || []) {
       for (const c0 of p0.cases || []) {
         c0.overlays = Array.isArray(c0.overlays) ? c0.overlays : [];
-        if (c0.id === 'P01-1') c0.image = './assets/bd/p01/c01.png';
+        if (c0.id === 'P01-1') c0.image = P01_IMAGE;
         else if (!Object.prototype.hasOwnProperty.call(c0, 'image')) c0.image = null;
         (c0.textes || []).forEach((t, ti) => {
           t.id ||= `${c0.id}-T${String(ti + 1).padStart(2, '0')}`;
@@ -23,6 +24,7 @@
     for (const p of SEED.planches || []) {
       for (const c of p.cases || []) {
         const c0 = canonicalCase(p.id, c.id);
+        if (c.id === 'P01-1' && c.image === './assets/bd/p01/c01.png') c.image = P01_IMAGE;
         if (!Object.prototype.hasOwnProperty.call(c, 'image')) c.image = c0?.image ?? null;
         c.overlays = Array.isArray(c.overlays) ? c.overlays : [];
         (c.textes || []).forEach((t, ti) => {
@@ -75,7 +77,8 @@
     let changed = false;
     for (const p of SEED.planches || []) for (const c of p.cases || []) {
       const key = ownerKey('case', c.id), list = MEDIA_META[key] || [], active = list.find(x => x.active) || list[0];
-      if (active && !active.builtin && (!c.image || c.image === './assets/bd/p01/c01.png')) { c.image = `idb://${active.id}`; changed = true; }
+      const canonicalImage = canonicalCase(p.id, c.id)?.image ?? null;
+      if (active && !active.builtin && (!c.image || c.image === canonicalImage)) { c.image = `idb://${active.id}`; changed = true; }
       if (Object.prototype.hasOwnProperty.call(MEDIA_META, key)) { delete MEDIA_META[key]; changed = true; }
     }
     if (changed) { persist(); saveMediaMeta(); toast('Images de cases migrées vers le nouveau modèle'); }
