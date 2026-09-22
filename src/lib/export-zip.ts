@@ -1,0 +1,184 @@
+import { APP_VERSION } from "./constants";
+import { clone } from "./seed";
+import { dbAll, imageExt } from "./media";
+import type { Meta, Seed } from "./types";
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes: Uint8Array) {
+  let c = 0xffffffff;
+  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function zipU16(n: number) {
+  return new Uint8Array([n & 255, (n >>> 8) & 255]);
+}
+function zipU32(n: number) {
+  return new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
+}
+function joinBytes(parts: Uint8Array[]) {
+  const size = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) {
+    out.set(p, at);
+    at += p.length;
+  }
+  return out;
+}
+
+function makeStoreZip(entries: Array<{ name: string; data: Uint8Array | ArrayBuffer }>) {
+  const enc = new TextEncoder();
+  const locals: Uint8Array[] = [];
+  const centrals: Uint8Array[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = enc.encode(entry.name);
+    const data = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data);
+    const crc = crc32(data);
+    const local = joinBytes([
+      zipU32(0x04034b50),
+      zipU16(20),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU32(crc),
+      zipU32(data.length),
+      zipU32(data.length),
+      zipU16(name.length),
+      zipU16(0),
+      name,
+      data,
+    ]);
+    locals.push(local);
+    const central = joinBytes([
+      zipU32(0x02014b50),
+      zipU16(20),
+      zipU16(20),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU32(crc),
+      zipU32(data.length),
+      zipU32(data.length),
+      zipU16(name.length),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU16(0),
+      zipU32(0),
+      zipU32(offset),
+      name,
+    ]);
+    centrals.push(central);
+    offset += local.length;
+  }
+  const centralSize = centrals.reduce((n, p) => n + p.length, 0);
+  const end = joinBytes([
+    zipU32(0x06054b50),
+    zipU16(0),
+    zipU16(0),
+    zipU16(entries.length),
+    zipU16(entries.length),
+    zipU32(centralSize),
+    zipU32(offset),
+    zipU16(0),
+  ]);
+  return new Blob([...locals, ...centrals, end] as BlobPart[], { type: "application/zip" });
+}
+
+export function downloadBlob(blob: Blob, name: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+export function downloadJson(data: unknown, name: string) {
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), name);
+}
+
+function exportAssetPath(
+  numero: number,
+  caseNumero: string,
+  caseId: string,
+  mime?: string,
+  name?: string,
+) {
+  const pn = String(numero).padStart(2, "0");
+  const raw = String(caseNumero);
+  const clean = raw.toLowerCase().replace(/[^a-z0-9]+/g, "") || caseId.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const cn = /^\d+$/.test(clean) ? clean.padStart(2, "0") : clean.replace(/^(\d)(\D)/, "0$1$2");
+  return `assets/bd/p${pn}/c${cn}.${imageExt(mime, name)}`;
+}
+
+export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown) {
+  const enc = new TextEncoder();
+  const records = await dbAll();
+  const byId = new Map(records.map((r) => [r.id, r]));
+  const portable = clone(seed);
+  const entries: Array<{ name: string; data: Uint8Array | ArrayBuffer }> = [];
+  const manifest: Array<{ case_id: string | null; source: string; target: string; name: string | null }> = [];
+  for (const p of portable.planches || []) {
+    for (const c of p.cases || []) {
+      if (!String(c.image || "").startsWith("idb://")) continue;
+      const id = String(c.image).slice(6);
+      const rec = byId.get(id);
+      if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${c.id}`);
+      const path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
+      entries.push({ name: path, data: await rec.blob.arrayBuffer() });
+      manifest.push({ case_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
+      c.image = "./" + path;
+    }
+  }
+  const used = new Set(manifest.map((x) => x.source.slice(6)));
+  for (const rec of records) {
+    if (used.has(rec.id) || !rec.blob) continue;
+    const ext = imageExt(rec.mime || rec.blob.type, rec.name);
+    entries.push({ name: `assets/uncommitted/${rec.id}.${ext}`, data: await rec.blob.arrayBuffer() });
+    manifest.push({
+      case_id: null,
+      source: `idb://${rec.id}`,
+      target: `./assets/uncommitted/${rec.id}.${ext}`,
+      name: rec.name || null,
+    });
+  }
+  const exportedAt = new Date().toISOString();
+  entries.unshift(
+    { name: "storyforge-v46-seed-travail.json", data: enc.encode(JSON.stringify(portable, null, 2)) },
+    {
+      name: "storyforge-v46-session.json",
+      data: enc.encode(
+        JSON.stringify(
+          {
+            format: "storyforge-standalone-session",
+            format_version: 4,
+            app_version: APP_VERSION,
+            exported_at: exportedAt,
+            seed,
+            meta,
+            media_meta: mediaMeta,
+          },
+          null,
+          2,
+        ),
+      ),
+    },
+    {
+      name: "integration-manifest.json",
+      data: enc.encode(JSON.stringify({ exported_at: exportedAt, files: manifest }, null, 2)),
+    },
+  );
+  downloadBlob(makeStoreZip(entries), "storyforge-v46-export.zip");
+}

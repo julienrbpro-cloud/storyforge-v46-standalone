@@ -1,0 +1,149 @@
+import { uid } from "./utils";
+
+const DB_NAME = "storyforge-v46-media";
+const STORE = "media";
+
+export interface MediaRecord {
+  id: string;
+  ownerType?: string;
+  ownerId?: string;
+  blob: Blob;
+  mime?: string;
+  name?: string;
+  kind?: string;
+  createdAt?: string;
+}
+
+let dbPromise: Promise<IDBDatabase> | null = null;
+const urlCache = new Map<string, string>();
+
+export function openDB() {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  return dbPromise;
+}
+
+export async function dbPut(record: MediaRecord) {
+  const db = await openDB();
+  return new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(record);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+export async function dbGet(id: string) {
+  const db = await openDB();
+  return new Promise<MediaRecord | undefined>((res, rej) => {
+    const q = db.transaction(STORE).objectStore(STORE).get(id);
+    q.onsuccess = () => res(q.result as MediaRecord | undefined);
+    q.onerror = () => rej(q.error);
+  });
+}
+
+export async function dbDelete(id: string) {
+  const db = await openDB();
+  return new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+export async function dbAll() {
+  const db = await openDB();
+  return new Promise<MediaRecord[]>((res, rej) => {
+    const q = db.transaction(STORE).objectStore(STORE).getAll();
+    q.onsuccess = () => res((q.result as MediaRecord[]) || []);
+    q.onerror = () => rej(q.error);
+  });
+}
+
+export async function dbClear() {
+  const db = await openDB();
+  return new Promise<void>((res, rej) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+export async function mediaUrl(id: string) {
+  if (urlCache.has(id)) return urlCache.get(id)!;
+  const rec = await dbGet(id);
+  if (!rec?.blob) return null;
+  const u = URL.createObjectURL(rec.blob);
+  urlCache.set(id, u);
+  return u;
+}
+
+export function revokeMediaUrl(id: string) {
+  const u = urlCache.get(id);
+  if (u) URL.revokeObjectURL(u);
+  urlCache.delete(id);
+}
+
+export function revokeAllMediaUrls() {
+  urlCache.forEach((u) => URL.revokeObjectURL(u));
+  urlCache.clear();
+}
+
+export async function resolveImageRef(ref: string | null | undefined) {
+  if (!ref) return null;
+  if (!String(ref).startsWith("idb://")) return ref;
+  return mediaUrl(String(ref).slice(6));
+}
+
+export function dataUrlToBlob(data: string) {
+  const [head, body] = data.split(",");
+  const mime = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
+  const bytes = atob(body);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+export async function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(blob);
+  });
+}
+
+export async function putCaseImage(cid: string, file: File) {
+  const mid = uid("image");
+  await dbPut({
+    id: mid,
+    ownerType: "case",
+    ownerId: cid,
+    blob: file,
+    mime: file.type || "application/octet-stream",
+    name: file.name || "image",
+    createdAt: new Date().toISOString(),
+  });
+  return `idb://${mid}`;
+}
+
+export function imageExt(mime?: string, name = "") {
+  const byMime: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/avif": "avif",
+  };
+  return byMime[mime || ""] || ((String(name).match(/\.([a-z0-9]+)$/i) || [])[1] || "img").toLowerCase();
+}
