@@ -111,7 +111,15 @@ try {
     await dialog.locator(".case-canvas img").waitFor();
     await page.screenshot({ animations: "disabled", path: join(output, `editor-${width}.png`) });
     await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
-    pass("case editor, image upload, visible lettering, drag, size and prompt");
+    const resizedCard = page.getByRole("button").filter({ hasText: "QA description" }).first();
+    const resizedCell = resizedCard.locator("..");
+    assert.match((await resizedCell.getAttribute("style")) || "", /grid-column:\s*span 2/);
+    assert.match((await resizedCell.getAttribute("style")) || "", /grid-row:\s*span 2/);
+    assert.equal(
+      await resizedCard.locator("img").first().evaluate((img) => getComputedStyle(img).objectFit),
+      "contain",
+    );
+    pass("case editor, image upload, visible lettering, drag, size, full-image fit and prompt");
     await click("Notes");
     await page.getByLabel("Note de production", { exact: true }).fill("Note QA P01");
     await page.getByLabel("Archiviste", { exact: true }).selectOption("2");
@@ -222,7 +230,34 @@ try {
     await page.emulateMedia({ media: "screen" });
     pass("printing waits for images and excludes application controls");
     await page.goto(base + "/bibliotheque");
+    const firstPerson = page.locator("article").first();
+    await firstPerson.getByLabel("Nom", { exact: true }).fill("Julien QA");
+    await firstPerson.getByLabel("Rôle", { exact: true }).fill("Rôle QA");
+    await firstPerson.getByLabel("Description", { exact: true }).fill("Description QA");
+    await upload(firstPerson.getByRole("button", { name: "Remplacer l’image", exact: true }), {
+      name: "reference.png",
+      mimeType: "image/png",
+      buffer: pixel,
+    });
+    await page.getByText("Image de référence enregistrée", { exact: true }).waitFor();
     await click("Règles");
+    const firstRule = page.locator("article").first();
+    await firstRule.getByLabel("Titre", { exact: true }).fill("PRINCIPE QA");
+    await firstRule.getByLabel("Contenu", { exact: true }).fill("Règle QA modifiable");
+    await waitSaved();
+    await page.reload();
+    await click("Personnages");
+    assert.equal(await page.locator("article").first().getByLabel("Nom", { exact: true }).inputValue(), "Julien QA");
+    assert.equal(
+      await page.locator("article").first().getByLabel("Description", { exact: true }).inputValue(),
+      "Description QA",
+    );
+    await click("Règles");
+    assert.equal(await page.locator("article").first().getByLabel("Titre", { exact: true }).inputValue(), "PRINCIPE QA");
+    assert.equal(
+      await page.locator("article").first().getByLabel("Contenu", { exact: true }).inputValue(),
+      "Règle QA modifiable",
+    );
     await click("Cohérence");
     await click("Personnages");
     assert.ok((await page.locator("article").count()) >= 5);
@@ -231,7 +266,7 @@ try {
       false,
     );
     assert.deepEqual(errors, []);
-    pass("library, coherence and mobile overflow; no uncaught application error");
+    pass("editable library persists character image/text and editorial rules without mobile overflow");
     await context.close();
   }
 } catch (error) {
