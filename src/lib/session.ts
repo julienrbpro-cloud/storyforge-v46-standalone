@@ -73,6 +73,11 @@ export function parseSession(data: unknown) {
         throw new Error(`La sauvegarde ne contient pas l’image de ${c.id}. Rien n’a été remplacé.`);
       }
     }
+  for (const entity of [...(seed.personnages || []), ...(seed.gardiens || [])]) {
+    if (entity.image?.startsWith("idb://") && !records.has(entity.image.slice(6))) {
+      throw new Error(`La sauvegarde ne contient pas l’image de référence de ${entity.id}. Rien n’a été remplacé.`);
+    }
+  }
   return {
     seed,
     meta: normalizeMeta(d.meta),
