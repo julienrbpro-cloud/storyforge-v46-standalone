@@ -22,13 +22,13 @@ export function CaseCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex flex-col overflow-hidden rounded-xl border border-black/20 bg-paper text-left text-paper-ink transition-[box-shadow,transform] duration-150",
+        "flex h-full flex-col overflow-hidden rounded-xl border border-black/20 bg-paper text-left text-paper-ink transition-[box-shadow,transform] duration-150",
         selected ? "ring-2 ring-accent ring-offset-2 ring-offset-cream" : "hover:border-black/40",
       )}
     >
-      <div className="relative aspect-square overflow-hidden bg-cream-2">
-        {panel.overlays.length ? <OverlayCanvas panel={panel} editable={false} className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : panel.image ? (
-          <CaseImage src={panel.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-cream-2">
+        {panel.overlays.length ? <OverlayCanvas panel={panel} editable={false} imageFit="contain" className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : panel.image ? (
+          <CaseImage src={panel.image} alt="" className="absolute inset-0 h-full w-full object-contain" />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-subtle">
             <ImagePlus className="size-7 opacity-50" strokeWidth={1.5} />
