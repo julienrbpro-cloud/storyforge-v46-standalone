@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: storyforge-ci-${{ github.ref }}
@@ -36,6 +36,18 @@ jobs:
         run: |
           npm install --package-lock-only --ignore-scripts --no-audit --no-fund
           git diff -- package-lock.json || true
+
+      - name: Commit reconciled lockfile on branch
+        if: github.event_name == 'push' && github.ref == 'refs/heads/fix/storyforge-reliability'
+        shell: bash
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Reconcile package lock for Node 22 CI"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
 
       - name: Upload reconciled lockfile
         uses: actions/upload-artifact@v4
