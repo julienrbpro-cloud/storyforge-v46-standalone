@@ -9,7 +9,7 @@ import {
   CASE_STATUSES,
 } from "./constants";
 import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIEL } from "./seed";
-import { dbReplace, putCaseImage } from "./media";
+import { dbReplace, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
@@ -52,6 +52,14 @@ interface StudioState {
   toggleCasePerson: (pid: string, cid: string, id: string, on: boolean) => void;
   setCaseGuardian: (pid: string, cid: string, gid: GuardianId, value: string) => void;
   setCaseSize: (pid: string, cid: string, key: "width" | "height", value: number) => void;
+  setLibraryEntityField: (
+    kind: "personnage" | "gardien",
+    id: string,
+    key: string,
+    value: unknown,
+  ) => void;
+  setEditorialRuleField: (id: string, key: "titre" | "contenu", value: string) => void;
+  replaceLibraryImage: (kind: "personnage" | "gardien", id: string, file: File) => Promise<void>;
   setTextField: (pid: string, cid: string, tid: string, key: string, value: unknown) => void;
   addText: (pid: string, cid: string) => void;
   removeText: (pid: string, cid: string, tid: string) => void;
@@ -285,6 +293,37 @@ export const useStudio = create<StudioState>((set, get) => {
         height: Math.min(3, Math.max(1, next.height)),
       };
       bump();
+    },
+
+    setLibraryEntityField(kind, id, key, value) {
+      const seed = get().seed;
+      const target =
+        kind === "personnage"
+          ? seed.personnages.find((x) => x.id === id)
+          : seed.gardiens.find((x) => x.id === id);
+      if (!target) return;
+      (target as unknown as Record<string, unknown>)[key] = value;
+      bump();
+    },
+
+    setEditorialRuleField(id, key, value) {
+      const rule = get().seed.regles_editoriales.find((x) => x.id === id);
+      if (!rule) return;
+      rule[key] = value;
+      bump();
+    },
+
+    async replaceLibraryImage(kind, id, file) {
+      const seed = get().seed;
+      const target =
+        kind === "personnage"
+          ? seed.personnages.find((x) => x.id === id)
+          : seed.gardiens.find((x) => x.id === id);
+      if (!target) return;
+      const ref = await putImage(kind, id, file);
+      target.image = ref;
+      bump();
+      toast.success("Image de référence enregistrée");
     },
 
     setTextField(pid, cid, tid, key, value) {
