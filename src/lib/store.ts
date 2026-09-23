@@ -549,13 +549,28 @@ export const useStudio = create<StudioState>((set, get) => {
     },
 
     resetWorkingSeed() {
+      const current = get().seed;
       const images = new Map<string, string>();
-      for (const p of get().seed.planches) {
+      const personImages = new Map<string, string>();
+      const guardianImages = new Map<string, string>();
+      for (const p of current.planches) {
         for (const c of p.cases) if (c.image) images.set(c.id, c.image);
+      }
+      for (const person of current.personnages || []) {
+        if (person.image) personImages.set(person.id, person.image);
+      }
+      for (const guardian of current.gardiens || []) {
+        if (guardian.image) guardianImages.set(guardian.id, guardian.image);
       }
       const seed = clone(SEED_OFFICIEL);
       for (const p of seed.planches) {
         for (const c of p.cases) if (images.has(c.id)) c.image = images.get(c.id)!;
+      }
+      for (const person of seed.personnages || []) {
+        if (personImages.has(person.id)) person.image = personImages.get(person.id)!;
+      }
+      for (const guardian of seed.gardiens || []) {
+        if (guardianImages.has(guardian.id)) guardian.image = guardianImages.get(guardian.id)!;
       }
       const normalized = normalizeSeed(seed);
       const meta = emptyMeta();
