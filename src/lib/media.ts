@@ -125,7 +125,7 @@ export async function resolveImageRef(ref: string | null | undefined) {
 }
 
 export function dataUrlToBlob(data: string) {
-  const match = data.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\\s]+)$/i);
+  const match = data.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i);
   if (!match) throw new Error("Image de sauvegarde invalide");
   const [, mime, body] = match;
   let bytes: string;
