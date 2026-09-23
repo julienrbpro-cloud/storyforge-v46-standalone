@@ -3,7 +3,8 @@ import { test } from "node:test";
 import "fake-indexeddb/auto";
 import { SEED_OFFICIEL, normalizeSeed, parseSeed, normalizeMeta, emptyMeta } from "../src/lib/seed";
 import { useStudio } from "../src/lib/store";
-import { dbAll, dbPut, dbReplace } from "../src/lib/media";
+import { dataUrlToBlob, dbAll, dbPut, dbReplace, openDB } from "../src/lib/media";
+import { LS_MEDIA_META, LS_META, LS_SEED } from "../src/lib/constants";
 import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
 import { checkPage, choiceFor } from "../src/lib/coherence";
@@ -172,6 +173,50 @@ test("invalid and incomplete backups never clear existing images or manuscript",
     await assert.rejects(useStudio.getState().importSessionJson(input));
     assert.equal(useStudio.getState().seed, previous);
     assert.equal((await dbAll()).length, records.length);
+  }
+});
+
+test("backup media accepts only non-empty image data URLs", () => {
+  const valid = dataUrlToBlob("data:image/png;base64,eA==");
+  assert.equal(valid.type, "image/png");
+  assert.equal(valid.size, 1);
+  for (const data of [
+    "data:text/plain;base64,eA==",
+    "data:image/png;base64,",
+    "data:image/png;base64,%%%%",
+  ]) {
+    assert.throws(
+      () => parseSession({ seed: SEED_OFFICIEL, media: [{ id: "bad", data }] }),
+      /Image de sauvegarde invalide/,
+    );
+  }
+});
+
+test("failed media restore puts back the exact raw localStorage bytes", async () => {
+  const s = fresh();
+  const savedStorage = new Map(storage);
+  const db = await openDB();
+  try {
+    localStorage.setItem(LS_SEED, "{invalid-json");
+    localStorage.setItem(LS_META, "raw-meta-not-json");
+    localStorage.setItem(LS_MEDIA_META, "raw-media-not-json");
+    Object.defineProperty(db, "transaction", {
+      configurable: true,
+      value: () => {
+        throw new Error("forced media failure");
+      },
+    });
+    await assert.rejects(
+      s.importSessionJson({ seed: SEED_OFFICIEL, media: [] }),
+      /forced media failure/,
+    );
+    assert.equal(localStorage.getItem(LS_SEED), "{invalid-json");
+    assert.equal(localStorage.getItem(LS_META), "raw-meta-not-json");
+    assert.equal(localStorage.getItem(LS_MEDIA_META), "raw-media-not-json");
+  } finally {
+    Reflect.deleteProperty(db, "transaction");
+    storage.clear();
+    for (const [key, value] of savedStorage) storage.set(key, value);
   }
 });
 

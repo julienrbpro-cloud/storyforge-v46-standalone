@@ -125,10 +125,16 @@ export async function resolveImageRef(ref: string | null | undefined) {
 }
 
 export function dataUrlToBlob(data: string) {
-  if (!/^data:[^,]*;base64,[A-Za-z0-9+/=\s]*$/.test(data)) throw new Error("Image de sauvegarde invalide");
-  const [head, body] = data.split(",");
-  const mime = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
-  const bytes = atob(body);
+  const match = data.match(/^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=\\s]+)$/i);
+  if (!match) throw new Error("Image de sauvegarde invalide");
+  const [, mime, body] = match;
+  let bytes: string;
+  try {
+    bytes = atob(body);
+  } catch {
+    throw new Error("Image de sauvegarde invalide");
+  }
+  if (!bytes.length) throw new Error("Image de sauvegarde invalide");
   const arr = new Uint8Array(bytes.length);
   for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
   return new Blob([arr], { type: mime });

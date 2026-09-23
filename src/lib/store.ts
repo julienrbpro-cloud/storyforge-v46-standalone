@@ -108,6 +108,19 @@ function saveLocalSnapshot(seed: Seed, meta: Meta, mediaMeta: Record<string, unk
   }
 }
 
+function captureRawLocalSnapshot(): Array<[string, string | null]> {
+  return [LS_SEED, LS_META, LS_MEDIA_META].map(
+    (key) => [key, localStorage.getItem(key)] as [string, string | null],
+  );
+}
+
+function restoreRawLocalSnapshot(snapshot: Array<[string, string | null]>) {
+  for (const [key, value] of snapshot) {
+    if (value == null) localStorage.removeItem(key);
+    else localStorage.setItem(key, value);
+  }
+}
+
 export const useStudio = create<StudioState>((set, get) => {
   const schedulePersist = () => {
     set({ saveState: "saving" });
@@ -531,14 +544,18 @@ export const useStudio = create<StudioState>((set, get) => {
 
     async importSessionJson(data) {
       const restored = parseSession(data);
-      // Check localStorage first; quota errors must never destroy the old media.
-      const previous = { seed: get().seed, meta: get().meta, mediaMeta: get().mediaMeta };
+      // Keep the exact raw bytes: corrupt-but-recoverable local data must survive a failed media restore.
+      const previousLocal = captureRawLocalSnapshot();
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = null;
       saveLocalSnapshot(restored.seed, restored.meta, restored.mediaMeta);
       try { await dbReplace(restored.records); }
       catch (error) {
-        saveLocalSnapshot(previous.seed, previous.meta, previous.mediaMeta);
+        try {
+          restoreRawLocalSnapshot(previousLocal);
+        } catch {
+          throw new Error("Restauration interrompue et retour aux données locales précédentes impossible");
+        }
         throw error;
       }
       set({ seed: restored.seed, meta: restored.meta, mediaMeta: restored.mediaMeta,
