@@ -26,7 +26,7 @@ export function openDB() {
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => { dbPromise = null; reject(req.error); };
   });
   return dbPromise;
 }
@@ -79,6 +79,25 @@ export async function dbClear() {
   });
 }
 
+/** Replace the media set in one transaction: an invalid write rolls back the clear too. */
+export async function dbReplace(records: MediaRecord[]) {
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error("Restauration des images interrompue"));
+    const store = tx.objectStore(STORE);
+    try {
+      store.clear();
+      for (const record of records) store.put(record);
+    } catch (error) {
+      tx.abort();
+      reject(error);
+    }
+  });
+  revokeAllMediaUrls();
+}
+
 export async function mediaUrl(id: string) {
   if (urlCache.has(id)) return urlCache.get(id)!;
   const rec = await dbGet(id);
@@ -106,6 +125,7 @@ export async function resolveImageRef(ref: string | null | undefined) {
 }
 
 export function dataUrlToBlob(data: string) {
+  if (!/^data:[^,]*;base64,[A-Za-z0-9+/=\s]*$/.test(data)) throw new Error("Image de sauvegarde invalide");
   const [head, body] = data.split(",");
   const mime = (head.match(/data:([^;]+)/) || [])[1] || "image/jpeg";
   const bytes = atob(body);
@@ -124,6 +144,7 @@ export async function blobToDataUrl(blob: Blob) {
 }
 
 export async function putCaseImage(cid: string, file: File) {
+  if (!file.type.startsWith("image/") || !file.size) throw new Error("Choisis un fichier image non vide.");
   const mid = uid("image");
   await dbPut({
     id: mid,

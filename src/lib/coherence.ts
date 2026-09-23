@@ -8,9 +8,11 @@ export function effectiveGuardian(p: Planche, c: PanelCase, gid: GuardianId) {
 }
 
 export function choiceFor(seed: Seed, p: Planche, c: PanelCase) {
+  const canonical = SEED_OFFICIEL.planches.find((page) => page.id === p.id);
+  const canonicalCase = canonical?.cases.find((panel) => panel.id === c.id);
   return (
     (seed.choix_editoriaux_ouverts || []).find(
-      (x) => String(x.planche) === String(p.numero) && String(x.case) === String(c.numero),
+      (x) => String(x.planche) === String(canonical?.numero ?? p.numero) && String(x.case) === String(canonicalCase?.numero ?? c.numero),
     ) ||
     (seed.choix_editoriaux_ouverts || []).find(
       (x) => c.id?.includes("P16-2A") && x.id === "P16-C2A-VERBATIM",
@@ -31,7 +33,7 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
       out.push({ level: "error", title: `${label} absent avec niveau`, text: "Un gardien absent doit avoir un niveau nul." });
     if (s?.present && !appear)
       out.push({ level: "warn", title: `${label} déclaré présent`, text: "Aucune case de la planche ne contient ce gardien." });
-    if (!s?.present && appear)
+    if (!s?.present && (p.cases || []).some((c) => c.personnages.includes(gid) && !effectiveGuardian(p, c, gid).present))
       out.push({ level: "error", title: `${label} déclaré absent`, text: "Au moins une case contient pourtant ce gardien." });
     const cs = canonical?.gardien_etat?.[gid];
     if (cs && JSON.stringify(cs) !== JSON.stringify(s))
@@ -42,6 +44,8 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
       });
     for (const c of p.cases || []) {
       const e = effectiveGuardian(p, c, gid);
+      if (e.present && (!Number.isInteger(e.niveau) || (e.niveau ?? -1) < 0 || (e.niveau ?? 9) > 5))
+        out.push({ level: "error", title: `Case ${c.numero} : ${label} niveau invalide`, text: "Choisir un niveau de 0 à 5." });
       if ((c.personnages || []).includes(gid) && !e.present)
         out.push({
           level: "error",
@@ -65,7 +69,7 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
         });
     }
   }
-  const n = Number(p.numero);
+  const n = Number(canonical?.numero ?? p.numero);
   if ([15, 19, 24].includes(n)) {
     const idx = seed.planches.indexOf(p);
     for (const [gid, label] of GUARDIANS) {

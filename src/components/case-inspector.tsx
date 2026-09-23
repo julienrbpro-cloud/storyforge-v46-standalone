@@ -10,6 +10,9 @@ import { caseSize } from "@/lib/visual-layout";
 import { buildPrompt } from "@/lib/prompt";
 import { toast } from "sonner";
 import type { Overlay, PanelCase, Planche } from "@/lib/types";
+import { OverlayCanvas } from "@/components/overlay-canvas";
+import { CaseStatusBadge } from "@/components/status-badge";
+import { pickImage } from "@/lib/files";
 
 function overlayText(c: PanelCase, o: Overlay) {
   if (o.text_ref) return c.textes.find((t) => t.id === o.text_ref)?.contenu || "";
@@ -37,15 +40,11 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
   const size = caseSize(panel);
   const people = peopleOf(seed);
 
-  function pickImage() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file) void replaceImage(panel.id, file);
-    };
-    input.click();
+  async function chooseImage() {
+    try {
+      const file = await pickImage();
+      if (file) await replaceImage(panel.id, file);
+    } catch (error) { toast.error((error as Error).message); }
   }
 
   async function copyPrompt() {
@@ -60,7 +59,8 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
   return (
     <div className="space-y-3 text-paper-ink">
       <div className="flex flex-wrap gap-2">
-        <Button variant="paper" className="rounded-md" onClick={pickImage}>
+        <CaseStatusBadge pid={page.id} cid={panel.id} statut={panel.statut} />
+        <Button variant="paper" className="rounded-md" onClick={() => void chooseImage()}>
           {panel.image ? "Remplacer l’image" : "Ajouter une image"}
         </Button>
         {panel.image ? (
@@ -245,6 +245,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
             Assembler le prompt IA
           </Button>
           <h5 className="text-xs font-bold tracking-wide text-accent uppercase">Lettrage visuel</h5>
+          <OverlayCanvas page={page} panel={panel} />
           <p className="text-[11px] leading-snug text-subtle">
             Optionnel. Le storyboard n’en dépend pas — les dialogues vivent d’abord comme texte.
           </p>
@@ -288,9 +289,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
             {o.text_ref ? (
               <label className="col-span-2 text-[10px] font-extrabold text-paper-muted">
                 Contenu canonique
-                <textarea readOnly className="mt-1 min-h-16 w-full rounded-md border border-paper-line p-2 font-normal">
-                  {overlayText(panel, o)}
-                </textarea>
+                <textarea readOnly className="mt-1 min-h-16 w-full rounded-md border border-paper-line p-2 font-normal" value={overlayText(panel, o)} />
               </label>
             ) : (
               <label className="col-span-2 text-[10px] font-extrabold text-paper-muted">

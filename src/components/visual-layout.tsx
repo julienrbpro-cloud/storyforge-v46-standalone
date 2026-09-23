@@ -3,6 +3,7 @@ import { CaseImage } from "@/components/case-image";
 import { computeVisualPages } from "@/lib/visual-layout";
 import { useStudio } from "@/lib/store";
 import { clamp } from "@/lib/utils";
+import { OverlayCanvas } from "@/components/overlay-canvas";
 
 export function VisualLayout({ compact = false, plancheId }: { compact?: boolean; plancheId?: string }) {
   const seed = useStudio((s) => s.seed);
@@ -73,12 +74,13 @@ export function VisualLayout({ compact = false, plancheId }: { compact?: boolean
                   gridRow: `${row + 1} / span ${height}`,
                 }}
                 title={`${c.id} · ${width}×${height}`}
+                aria-label={`${c.id} · ${width}×${height}`}
                 onClick={() => {
                   setSelected(c.id);
                   void navigate({ to: "/planche/$plancheId", params: { plancheId: p.id } });
                 }}
               >
-                {c.image ? (
+                {c.overlays.length ? <OverlayCanvas panel={c} editable={false} imageFit="contain" className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : c.image ? (
                   <CaseImage src={c.image} alt="" className="absolute inset-0 h-full w-full object-contain" />
                 ) : (
                   <>

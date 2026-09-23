@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { before, after } from "node:test";
 import {
   appNameFromHost,
   createHeadInjector,
@@ -20,6 +20,10 @@ import {
 import { renderInstallPage } from "./grok-pwa-plugin.mjs";
 
 const TEMPLATE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+// Generic injector tests must not inherit StoryForge's site.json or card assets.
+const initialCwd = process.cwd();
+before(() => process.chdir(mkdtempSync(join(tmpdir(), "pwa-isolated-"))));
+after(() => process.chdir(initialCwd));
 
 test("injects before </head>", () => {
   const out = injectGrokPwaHead("<html><head><title>x</title></head><body></body></html>");

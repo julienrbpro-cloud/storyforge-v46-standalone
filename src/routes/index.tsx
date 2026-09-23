@@ -3,10 +3,12 @@ import { Mark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { LS_SEEN } from "@/lib/constants";
 import { useEffect } from "react";
+import { useStudio } from "@/lib/store";
 
 export const Route = createFileRoute("/")({ component: Splash });
 
 function Splash() {
+  const ready = useStudio((s) => s.ready);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -46,7 +48,7 @@ function Splash() {
         <br />
         Vos histoires prennent vie.
       </p>
-      <Button size="lg" className="min-w-[240px]" onClick={enter}>
+      <Button size="lg" className="min-w-[240px]" onClick={enter} disabled={!ready}>
         Entrer dans le studio
         <span aria-hidden>→</span>
       </Button>

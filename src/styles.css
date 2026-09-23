@@ -224,6 +224,9 @@
 }
 
 @media print {
+  body > :not(#print-root) {
+    display: none !important;
+  }
   body {
     background: #fff;
     color: #111;

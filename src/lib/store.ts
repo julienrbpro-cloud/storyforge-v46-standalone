@@ -8,8 +8,9 @@ import {
   PAGE_STATUSES,
   CASE_STATUSES,
 } from "./constants";
-import { clone, emptyMeta, findPlanches, normalizeSeed, SEED_OFFICIEL } from "./seed";
-import { dbClear, putCaseImage, revokeAllMediaUrls } from "./media";
+import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIEL } from "./seed";
+import { dbReplace, putCaseImage } from "./media";
+import { parseSession } from "./session";
 import { uid } from "./utils";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
 import type {
@@ -26,6 +27,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface StudioState {
   ready: boolean;
+  recoveryRequired: boolean;
   revision: number;
   saveState: SaveState;
   seed: Seed;
@@ -91,6 +93,21 @@ function readLocal<T>(key: string, fallback: T): T {
   }
 }
 
+function saveLocalSnapshot(seed: Seed, meta: Meta, mediaMeta: Record<string, unknown[]>) {
+  const values = [[LS_SEED, JSON.stringify(seed)], [LS_META, JSON.stringify(meta)],
+    [LS_MEDIA_META, JSON.stringify(mediaMeta)]];
+  const previous = values.map(([key]) => [key, localStorage.getItem(key)]);
+  try {
+    for (const [key, value] of values) localStorage.setItem(key, value);
+  } catch (error) {
+    try {
+      for (const [key] of values) localStorage.removeItem(key);
+      for (const [key, value] of previous) if (value != null) localStorage.setItem(key!, value);
+    } catch { /* The caller reports storage access failure. */ }
+    throw error;
+  }
+}
+
 export const useStudio = create<StudioState>((set, get) => {
   const schedulePersist = () => {
     set({ saveState: "saving" });
@@ -105,6 +122,7 @@ export const useStudio = create<StudioState>((set, get) => {
 
   return {
     ready: false,
+    recoveryRequired: false,
     revision: 0,
     saveState: "idle",
     seed: normalizeSeed(SEED_OFFICIEL),
@@ -116,15 +134,20 @@ export const useStudio = create<StudioState>((set, get) => {
     searchOpen: false,
 
     boot() {
-      if (typeof window === "undefined") return;
+      if (typeof window === "undefined" || get().ready) return;
       const metaStored = readLocal<Partial<Meta> | null>(LS_META, readLocal(LS_META_LEGACY, null));
-      const meta = {
-        ...emptyMeta(),
-        ...(metaStored || {}),
-        filters: { ...emptyMeta().filters, ...(metaStored?.filters || {}) },
-      };
-      const storedSeed = readLocal<Seed | null>(LS_SEED, null);
-      const seed = normalizeSeed(storedSeed ? Object.assign(clone(SEED_OFFICIEL), storedSeed) : SEED_OFFICIEL);
+      const meta = normalizeMeta(metaStored);
+      let seed: Seed;
+      let recoveryRequired = false;
+      try {
+        const rawSeed = localStorage.getItem(LS_SEED);
+        seed = rawSeed ? parseSeed(JSON.parse(rawSeed)) : normalizeSeed(SEED_OFFICIEL);
+      }
+      catch {
+        seed = normalizeSeed(SEED_OFFICIEL);
+        recoveryRequired = true;
+        toast.error("Sauvegarde locale illisible. Restaure une sauvegarde ou reviens au manuscrit canonique avant d’enregistrer. Les données locales sont conservées.");
+      }
       const mediaMeta = readLocal<Record<string, unknown[]>>(LS_MEDIA_META, {});
       if (!meta.statuts || Object.keys(meta.statuts).length === 0) {
         meta.statuts = {};
@@ -132,15 +155,16 @@ export const useStudio = create<StudioState>((set, get) => {
           meta.statuts[p.id] = inferPageStatus(p);
         }
       }
-      set({ seed, meta, mediaMeta, ready: true, saveState: "saved" });
+      set({ seed, meta, mediaMeta, ready: true, recoveryRequired, saveState: recoveryRequired ? "error" : "saved" });
     },
 
     persistNow() {
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
+      if (get().recoveryRequired) { set({ saveState: "error" }); return; }
       try {
         const { seed, meta, mediaMeta } = get();
-        localStorage.setItem(LS_SEED, JSON.stringify(seed));
-        localStorage.setItem(LS_META, JSON.stringify(meta));
-        localStorage.setItem(LS_MEDIA_META, JSON.stringify(mediaMeta));
+        saveLocalSnapshot(seed, meta, mediaMeta);
         set({ saveState: "saved" });
       } catch {
         set({ saveState: "error" });
@@ -190,7 +214,7 @@ export const useStudio = create<StudioState>((set, get) => {
     setPageField(pid, key, value) {
       const p = pageOf(get().seed, pid);
       if (!p) return;
-      (p as unknown as Record<string, unknown>)[key] = value || null;
+      (p as unknown as Record<string, unknown>)[key] = key === "titre" ? value || "" : value || null;
       bump();
     },
 
@@ -252,7 +276,7 @@ export const useStudio = create<StudioState>((set, get) => {
 
     setTextField(pid, cid, tid, key, value) {
       const t = caseOf(get().seed, pid, cid)?.textes.find((x) => x.id === tid);
-      if (!t) return;
+      if (!t || t.preserve_exact) return;
       (t as unknown as Record<string, unknown>)[key] = value;
       bump();
     },
@@ -274,6 +298,11 @@ export const useStudio = create<StudioState>((set, get) => {
     removeText(pid, cid, tid) {
       const c = caseOf(get().seed, pid, cid);
       if (!c) return;
+      const text = c.textes.find((x) => x.id === tid);
+      if (text?.preserve_exact) return;
+      for (const overlay of c.overlays) {
+        if (overlay.text_ref === tid) { overlay.content = text?.contenu || ""; delete overlay.text_ref; }
+      }
       c.textes = c.textes.filter((x) => x.id !== tid);
       bump();
     },
@@ -283,6 +312,7 @@ export const useStudio = create<StudioState>((set, get) => {
       if (!a) return;
       const j = index + dir;
       if (j < 0 || j >= a.length) return;
+      if (a[index]?.preserve_exact || a[j]?.preserve_exact) return;
       [a[index], a[j]] = [a[j], a[index]];
       bump();
     },
@@ -323,8 +353,8 @@ export const useStudio = create<StudioState>((set, get) => {
         o.text_ref = ref;
         delete o.content;
       } else {
+        o.content = caseOf(get().seed, pid, cid)?.textes.find((t) => t.id === o.text_ref)?.contenu || o.content || "";
         delete o.text_ref;
-        o.content = "";
       }
       bump();
     },
@@ -380,6 +410,7 @@ export const useStudio = create<StudioState>((set, get) => {
       });
       const meta = get().meta;
       meta.statuts[id] = "a_faire";
+      seed.projet.nombre_planches = seed.planches.length;
       bump();
       toast.success("Planche ajoutée");
       return id;
@@ -388,6 +419,7 @@ export const useStudio = create<StudioState>((set, get) => {
     deletePlanche(id) {
       const seed = get().seed;
       seed.planches = seed.planches.filter((p) => p.id !== id);
+      seed.projet.nombre_planches = seed.planches.length;
       seed.planches.forEach((p, i) => {
         p.numero = i + 1;
       });
@@ -461,8 +493,7 @@ export const useStudio = create<StudioState>((set, get) => {
     setPageNote(pid, note) {
       const meta = get().meta;
       meta.notes[pid] = note;
-      set({ meta });
-      schedulePersist();
+      bump();
     },
 
     resetWorkingSeed() {
@@ -483,45 +514,38 @@ export const useStudio = create<StudioState>((set, get) => {
         seed: normalized,
         meta,
         selectedCaseId: null,
+        recoveryRequired: false,
       });
       bump();
       toast.success("Seed canonique restauré · images conservées");
     },
 
     importSeedJson(data) {
-      if (!findPlanches(data)) throw new Error("JSON de seed illisible.");
-      const seed = normalizeSeed(Object.assign(clone(SEED_OFFICIEL), data as Seed));
-      set({ seed });
+      const seed = parseSeed(data);
+      const meta = emptyMeta();
+      for (const p of seed.planches) meta.statuts[p.id] = inferPageStatus(p);
+      set({ seed, meta, selectedCaseId: null, visualPageIndex: 0, recoveryRequired: false });
       bump();
       toast.success("Seed de travail importé");
     },
 
     async importSessionJson(data) {
-      const d = data as {
-        seed?: Seed;
-        meta?: Meta;
-        media_meta?: Record<string, unknown[]>;
-        media?: Array<{
-          id: string;
-          ownerType: string;
-          ownerId: string;
-          mime: string;
-          name: string;
-          kind: string;
-          createdAt: string;
-          data: string;
-        }>;
-        images?: Record<string, string>;
-      };
-      if (d.seed && findPlanches(d.seed)) {
-        set({ seed: normalizeSeed(Object.assign(clone(SEED_OFFICIEL), d.seed)) });
+      const restored = parseSession(data);
+      // Check localStorage first; quota errors must never destroy the old media.
+      const previous = { seed: get().seed, meta: get().meta, mediaMeta: get().mediaMeta };
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
+      saveLocalSnapshot(restored.seed, restored.meta, restored.mediaMeta);
+      try { await dbReplace(restored.records); }
+      catch (error) {
+        saveLocalSnapshot(previous.seed, previous.meta, previous.mediaMeta);
+        throw error;
       }
-      if (d.meta) set({ meta: { ...emptyMeta(), ...d.meta, filters: { ...emptyMeta().filters, ...(d.meta.filters || {}) } } });
-      await dbClear();
-      revokeAllMediaUrls();
-      if (d.media_meta) set({ mediaMeta: d.media_meta });
+      set({ seed: restored.seed, meta: restored.meta, mediaMeta: restored.mediaMeta,
+        selectedCaseId: null, visualPageIndex: 0, recoveryRequired: false });
       bump();
-      toast.success("Sauvegarde restaurée");
+      get().persistNow();
+      if (get().saveState === "saved") toast.success("Sauvegarde restaurée");
     },
   };
 });

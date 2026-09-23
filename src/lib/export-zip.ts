@@ -1,7 +1,8 @@
-import { APP_VERSION } from "./constants";
 import { clone } from "./seed";
 import { dbAll, imageExt } from "./media";
 import type { Meta, Seed } from "./types";
+import { createSession } from "./session";
+import { toast } from "sonner";
 
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
@@ -124,6 +125,17 @@ function exportAssetPath(
 }
 
 export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown) {
+  try {
+    downloadBlob(await buildProjectZip(seed, meta, mediaMeta), "storyforge-v46-export.zip");
+  } catch (error) {
+    toast.error("Export impossible : " + (error as Error).message);
+  }
+}
+
+export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown) {
+  seed = clone(seed);
+  meta = clone(meta);
+  mediaMeta = clone(mediaMeta);
   const enc = new TextEncoder();
   const records = await dbAll();
   const byId = new Map(records.map((r) => [r.id, r]));
@@ -132,25 +144,36 @@ export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknow
   const manifest: Array<{ case_id: string | null; source: string; target: string; name: string | null }> = [];
   for (const p of portable.planches || []) {
     for (const c of p.cases || []) {
-      if (!String(c.image || "").startsWith("idb://")) continue;
-      const id = String(c.image).slice(6);
-      const rec = byId.get(id);
+      if (!c.image) continue;
+      const source = c.image;
+      let rec;
+      if (source.startsWith("idb://")) rec = byId.get(source.slice(6));
+      else {
+        const response = await fetch(source);
+        if (!response.ok) throw new Error(`Image inaccessible : ${c.id}`);
+        const blob = await response.blob();
+        if (!blob.type.startsWith("image/")) throw new Error(`Fichier image invalide : ${c.id}`);
+        rec = { blob, mime: blob.type, name: source.split("/").pop() };
+      }
       if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${c.id}`);
-      const path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
+      let path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
+      if (entries.some((e) => e.name === path)) path = path.replace(/(\.[^.]+)$/, `-${manifest.length}$1`);
       entries.push({ name: path, data: await rec.blob.arrayBuffer() });
       manifest.push({ case_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
       c.image = "./" + path;
     }
   }
-  const used = new Set(manifest.map((x) => x.source.slice(6)));
+  const used = new Set(manifest.filter((x) => x.source.startsWith("idb://")).map((x) => x.source.slice(6)));
   for (const rec of records) {
     if (used.has(rec.id) || !rec.blob) continue;
     const ext = imageExt(rec.mime || rec.blob.type, rec.name);
-    entries.push({ name: `assets/uncommitted/${rec.id}.${ext}`, data: await rec.blob.arrayBuffer() });
+    const safeId = rec.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const target = `assets/uncommitted/${manifest.length}-${safeId}.${ext}`;
+    entries.push({ name: target, data: await rec.blob.arrayBuffer() });
     manifest.push({
       case_id: null,
       source: `idb://${rec.id}`,
-      target: `./assets/uncommitted/${rec.id}.${ext}`,
+      target: `./${target}`,
       name: rec.name || null,
     });
   }
@@ -161,15 +184,7 @@ export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknow
       name: "storyforge-v46-session.json",
       data: enc.encode(
         JSON.stringify(
-          {
-            format: "storyforge-standalone-session",
-            format_version: 4,
-            app_version: APP_VERSION,
-            exported_at: exportedAt,
-            seed,
-            meta,
-            media_meta: mediaMeta,
-          },
+          await createSession(seed, meta, mediaMeta, records),
           null,
           2,
         ),
@@ -180,5 +195,5 @@ export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknow
       data: enc.encode(JSON.stringify({ exported_at: exportedAt, files: manifest }, null, 2)),
     },
   );
-  downloadBlob(makeStoreZip(entries), "storyforge-v46-export.zip");
+  return makeStoreZip(entries);
 }

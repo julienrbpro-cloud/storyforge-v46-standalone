@@ -1,6 +1,6 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { CaseImage } from "@/components/case-image";
-import { clamp } from "@/lib/utils";
+import { clamp, cn } from "@/lib/utils";
 import { useStudio } from "@/lib/store";
 import type { Overlay, PanelCase, Planche } from "@/lib/types";
 
@@ -13,17 +13,23 @@ export function OverlayCanvas({
   page,
   panel,
   editable = true,
+  className,
+  imageFit = "cover",
 }: {
-  page: Planche;
+  page?: Planche;
   panel: PanelCase;
   editable?: boolean;
+  className?: string;
+  imageFit?: "cover" | "contain";
 }) {
   const setOverlay = useStudio((s) => s.setOverlay);
   const persistNow = useStudio((s) => s.persistNow);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const stopDrag = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopDrag.current?.(), []);
 
   function startDrag(ev: ReactPointerEvent<HTMLElement>, oid: string, mode: "move" | "resize") {
-    if (!editable) return;
+    if (!editable || !page) return;
     ev.preventDefault();
     ev.stopPropagation();
     const o = (panel.overlays || []).find((x) => x.id === oid);
@@ -63,23 +69,27 @@ export function OverlayCanvas({
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      stopDrag.current = null;
       persistNow();
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
+    window.addEventListener("pointercancel", up, { once: true });
+    stopDrag.current = up;
   }
 
   return (
     <div
       ref={canvasRef}
-      className="case-canvas relative min-h-[190px] overflow-hidden"
+      className={cn("case-canvas relative aspect-square min-h-[190px] overflow-hidden rounded-md border border-paper-line bg-paper", className)}
       style={{ touchAction: editable ? "none" : undefined, containerType: "inline-size" }}
     >
       {panel.image ? (
         <CaseImage
           src={panel.image}
           alt={`Case ${panel.numero}`}
-          className="absolute inset-0 h-full w-full object-cover"
+          className={cn("absolute inset-0 h-full w-full", imageFit === "contain" ? "object-contain" : "object-cover")}
         />
       ) : (
         <span className="pointer-events-none absolute inset-0 grid place-items-center font-display text-4xl text-[#c9bba0]">

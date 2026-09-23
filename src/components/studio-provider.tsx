@@ -14,9 +14,24 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [boot]);
 
   useEffect(() => {
+    function flush() {
+      if (useStudio.getState().saveState === "saving") useStudio.getState().persistNow();
+    }
+    function onVisibility() { if (document.visibilityState === "hidden") flush(); }
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      flush();
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.target as HTMLElement | null)?.isContentEditable || document.querySelector('[role="dialog"]')) return;
       if (e.key === "/" || ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k")) {
         e.preventDefault();
         useStudio.getState().setSearchOpen(true);
