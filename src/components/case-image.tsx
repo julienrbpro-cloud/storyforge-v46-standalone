@@ -19,7 +19,7 @@ export function CaseImage({
     if (!src) return;
     void resolveImageRef(src).then((u) => {
       if (live) setUrl(u);
-    });
+    }).catch(() => { if (live) setUrl(null); });
     return () => {
       live = false;
     };

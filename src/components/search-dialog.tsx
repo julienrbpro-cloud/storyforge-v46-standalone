@@ -50,7 +50,7 @@ export function SearchDialog() {
     }
     const people = peopleOf(seed).filter((p) => p.nom.toLowerCase().includes(query));
     return { planches: planches.slice(0, 8), cases, people };
-  }, [query, seed]);
+  }, [query, seed, revision]);
 
   function goPlanche(id: string, cid?: string) {
     setOpen(false);
@@ -63,7 +63,7 @@ export function SearchDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-bg/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
-        <DialogPrimitive.Content className="fixed inset-x-3 top-[12vh] z-50 mx-auto w-[min(92vw,520px)] overflow-hidden rounded-2xl border border-line bg-panel text-cream shadow-[0_24px_80px_rgb(0_0_0/0.55)]">
+        <DialogPrimitive.Content aria-describedby={undefined} className="fixed inset-x-3 top-[12vh] z-50 mx-auto w-[min(92vw,520px)] overflow-hidden rounded-2xl border border-line bg-panel text-cream shadow-[0_24px_80px_rgb(0_0_0/0.55)]">
           <DialogPrimitive.Title className="sr-only">Rechercher dans le manuscrit</DialogPrimitive.Title>
           <div className="flex items-center gap-2 border-b border-line px-3">
             <Search className="size-4 text-muted" />

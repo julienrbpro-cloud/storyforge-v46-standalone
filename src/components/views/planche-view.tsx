@@ -21,7 +21,9 @@ import { useStudio } from "@/lib/store";
 import { printStoryboard } from "@/lib/print";
 import { pickImage } from "@/lib/files";
 import { padPage } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { GUARDIANS } from "@/lib/constants";
+import { toast } from "sonner";
 
 const TABS = [
   ["storyboard", "Storyboard"],
@@ -39,6 +41,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
   const deleteCase = useStudio((s) => s.deleteCase);
   const deletePlanche = useStudio((s) => s.deletePlanche);
   const setPageField = useStudio((s) => s.setPageField);
+  const setPageGuardian = useStudio((s) => s.setPageGuardian);
   const setPageNote = useStudio((s) => s.setPageNote);
   const replaceImage = useStudio((s) => s.replaceCaseImage);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("storyboard");
@@ -46,6 +49,9 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
   const navigate = useNavigate();
   void revision;
   const p = seed.planches.find((x) => x.id === plancheId);
+  useEffect(() => {
+    setSheetOpen(Boolean(selected && p?.cases.some((c) => c.id === selected)));
+  }, [plancheId, selected]);
   if (!p) {
     return (
       <AppShell title={<div className="font-display text-lg">Planche introuvable</div>}>
@@ -63,7 +69,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
 
   async function addImage(cid: string) {
     const file = await pickImage();
-    if (file) void replaceImage(cid, file);
+    if (file) await replaceImage(cid, file).catch((error: Error) => toast.error(error.message));
   }
 
   return (
@@ -190,9 +196,28 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
                 <Textarea
                   placeholder="Repères de dessin, références, à faire…"
                   defaultValue={meta.notes[p.id] || ""}
+                  key={p.id}
                   onChange={(e) => setPageNote(p.id, e.target.value)}
                 />
               </Field>
+              <h5 className="text-xs font-bold text-tab-on">État des gardiens</h5>
+              <div className="grid grid-cols-2 gap-2">
+                {GUARDIANS.map(([gid, label]) => {
+                  const guardian = p.gardien_etat[gid];
+                  return <Field key={gid} label={label}>
+                    <select className="h-11 w-full rounded-md border border-paper-line bg-paper px-2"
+                      value={guardian.present ? String(guardian.niveau ?? 0) : "absent"}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setPageGuardian(p.id, gid, "present", value !== "absent");
+                        if (value !== "absent") setPageGuardian(p.id, gid, "niveau", Number(value));
+                      }}>
+                      <option value="absent">Absent</option>
+                      {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>Présent · niveau {n}</option>)}
+                    </select>
+                  </Field>;
+                })}
+              </div>
               {issues.length ? (
                 <div className="space-y-2">
                   {issues.map((x) => (

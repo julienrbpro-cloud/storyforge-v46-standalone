@@ -1,0 +1,168 @@
+name: StoryForge CI
+
+on:
+  push:
+    branches:
+      - fix/storyforge-reliability
+  pull_request:
+    branches:
+      - grok-app
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: storyforge-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and regression tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Start development server
+        shell: bash
+        run: |
+          npm run dev > "$RUNNER_TEMP/storyforge-dev.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/storyforge-dev.pid"
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/storyforge-dev.log"
+          exit 1
+
+      - name: Browser tests — development
+        env:
+          STORYFORGE_TEST_URL: http://127.0.0.1:8080
+          STORYFORGE_TEST_OUTPUT: ${{ runner.temp }}/storyforge-dev
+        run: npm run test:browser
+
+      - name: Stop development server
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/storyforge-dev.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/storyforge-dev.pid")" 2>/dev/null || true
+          fi
+
+      - name: Start compiled preview
+        shell: bash
+        run: |
+          npm run preview -- --host 0.0.0.0 --port 8081 > "$RUNNER_TEMP/storyforge-preview.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/storyforge-preview.pid"
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:8081/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/storyforge-preview.log"
+          exit 1
+
+      - name: Browser tests — compiled build
+        env:
+          STORYFORGE_TEST_URL: http://127.0.0.1:8081
+          STORYFORGE_TEST_OUTPUT: ${{ runner.temp }}/storyforge-production
+        run: npm run test:browser
+
+      - name: Verify exported ZIPs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import zipfile
+
+          roots = [
+              pathlib.Path("${{ runner.temp }}/storyforge-dev"),
+              pathlib.Path("${{ runner.temp }}/storyforge-production"),
+          ]
+
+          checked = 0
+          for root in roots:
+              for archive in sorted(root.glob("project-*.zip")):
+                  checked += 1
+                  with zipfile.ZipFile(archive) as z:
+                      bad = z.testzip()
+                      if bad:
+                          raise SystemExit(f"{archive}: CRC invalide dans {bad}")
+                      names = set(z.namelist())
+                      required = {
+                          "storyforge-v46-seed-travail.json",
+                          "storyforge-v46-session.json",
+                          "integration-manifest.json",
+                      }
+                      missing = required - names
+                      if missing:
+                          raise SystemExit(f"{archive}: fichiers manquants: {sorted(missing)}")
+                      p01 = [n for n in names if n.startswith("assets/bd/p01/")]
+                      if len(p01) != 4:
+                          raise SystemExit(f"{archive}: attendu 4 images P01, trouvé {len(p01)}: {p01}")
+                      session = json.loads(z.read("storyforge-v46-session.json"))
+                      if len(session.get("media", [])) != 1:
+                          raise SystemExit(f"{archive}: média de session importé absent")
+                      if not session["media"][0].get("data", "").startswith("data:image/png;base64,"):
+                          raise SystemExit(f"{archive}: média de session non portable")
+                      seed = json.loads(z.read("storyforge-v46-seed-travail.json"))
+                      refs = [
+                          c.get("image")
+                          for p in seed.get("planches", [])
+                          for c in p.get("cases", [])
+                          if c.get("image")
+                      ]
+                      if any(str(ref).startswith("idb://") for ref in refs):
+                          raise SystemExit(f"{archive}: référence idb:// restante dans le seed exporté")
+                  print(f"ZIP OK: {archive}")
+          if checked != 4:
+              raise SystemExit(f"Attendu 4 ZIP (2 tailles × 2 builds), trouvé {checked}")
+          PY
+
+      - name: Stop compiled preview
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/storyforge-preview.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/storyforge-preview.pid")" 2>/dev/null || true
+          fi
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storyforge-qa-${{ github.run_id }}
+          if-no-files-found: warn
+          retention-days: 7
+          path: |
+            ${{ runner.temp }}/storyforge-dev/**
+            ${{ runner.temp }}/storyforge-production/**
+            ${{ runner.temp }}/storyforge-dev.log
+            ${{ runner.temp }}/storyforge-preview.log

@@ -3,6 +3,7 @@ import { CaseImage } from "@/components/case-image";
 import { caseCaption } from "@/lib/project";
 import { cn } from "@/lib/utils";
 import type { PanelCase } from "@/lib/types";
+import { OverlayCanvas } from "@/components/overlay-canvas";
 
 export function CaseCard({
   panel,
@@ -26,7 +27,7 @@ export function CaseCard({
       )}
     >
       <div className="relative aspect-square overflow-hidden bg-cream-2">
-        {panel.image ? (
+        {panel.overlays.length ? <OverlayCanvas panel={panel} editable={false} className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : panel.image ? (
           <CaseImage src={panel.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-subtle">

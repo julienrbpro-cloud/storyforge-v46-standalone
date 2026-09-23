@@ -22,15 +22,17 @@ import { exportProjectZip, downloadJson } from "@/lib/export-zip";
 import { printStoryboard } from "@/lib/print";
 import { progressOf, PROJECT_GENRES, shortChapter } from "@/lib/project";
 import { padPage } from "@/lib/utils";
+import { VisualLayout } from "@/components/visual-layout";
 
 const TABS = [
   ["planches", "Planches"],
   ["personnages", "Personnages"],
   ["notes", "Notes"],
   ["fichiers", "Fichiers"],
+  ["mise-en-page", "Mise en page"],
 ] as const;
 
-export function ProjectView({ tab = "planches", chapitre }: { tab?: string; chapitre?: string }) {
+export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS)[number][0]; chapitre?: string }) {
   const seed = useStudio((s) => s.seed);
   const meta = useStudio((s) => s.meta);
   const revision = useStudio((s) => s.revision);
@@ -47,11 +49,11 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: string; chap
   const people = peopleOf(seed);
 
   useEffect(() => {
-    if (chapitre && meta.filters.chapitre !== chapitre) setFilter("chapitre", chapitre);
-  }, [chapitre, meta.filters.chapitre, setFilter]);
+    setFilter("chapitre", chapitre || "");
+  }, [chapitre, setFilter]);
 
   function setTab(next: string) {
-    void navigate({ to: "/projet", search: { tab: next, chapitre: meta.filters.chapitre || undefined } });
+    void navigate({ to: "/projet", search: { tab: next as (typeof TABS)[number][0], chapitre: meta.filters.chapitre || undefined } });
   }
 
   return (
@@ -103,7 +105,10 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: string; chap
               {meta.filters.chapitre ? (
                 <div className="mb-2 flex items-center justify-between rounded-lg bg-chip px-3 py-2 text-xs font-bold text-chip-fg">
                   <span>{shortChapter(meta.filters.chapitre)}</span>
-                  <button type="button" className="text-tab-on" onClick={() => setFilter("chapitre", "")}>
+                  <button type="button" className="text-tab-on" onClick={() => {
+                    setFilter("chapitre", "");
+                    void navigate({ to: "/projet", search: { tab } });
+                  }}>
                     Tout voir
                   </button>
                 </div>
@@ -131,6 +136,7 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: string; chap
           {tab === "personnages" ? <PersonnagesPanel /> : null}
 
           {tab === "notes" ? <NotesPanel /> : null}
+          {tab === "mise-en-page" ? <VisualLayout /> : null}
 
           {tab === "fichiers" ? (
             <div className="space-y-2">
@@ -235,7 +241,7 @@ function PlancheList({
                       <MoreHorizontal className="size-4" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent>
+                  <DropdownMenuContent onClick={(event) => event.stopPropagation()}>
                     <DropdownMenuItem onSelect={() => onOpen(p.id)}>Ouvrir</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => onMove(p.id, -1)}>Monter</DropdownMenuItem>
                     <DropdownMenuItem onSelect={() => onMove(p.id, 1)}>Descendre</DropdownMenuItem>
@@ -311,7 +317,8 @@ function PersonnagesPanel() {
 
 function NotesPanel() {
   const seed = useStudio((s) => s.seed);
-  const notes = seed.planches.filter((p) => p.instructions_planche || (p.notes_planche || []).length);
+  const meta = useStudio((s) => s.meta);
+  const notes = seed.planches.filter((p) => p.instructions_planche || (p.notes_planche || []).length || meta.notes[p.id]);
   if (!notes.length) {
     return (
       <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
@@ -337,6 +344,7 @@ function NotesPanel() {
               {n}
             </p>
           ))}
+          {meta.notes[p.id] ? <p className="mt-2 whitespace-pre-wrap text-[12.5px] leading-relaxed"><b>Note de production : </b>{meta.notes[p.id]}</p> : null}
         </div>
       ))}
     </div>

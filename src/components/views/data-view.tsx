@@ -7,6 +7,7 @@ import { downloadJson, exportProjectZip } from "@/lib/export-zip";
 import { printStoryboard } from "@/lib/print";
 import { pickJson } from "@/lib/files";
 import { toast } from "sonner";
+import { createSession } from "@/lib/session";
 
 export function DataView() {
   const seed = useStudio((s) => s.seed);
@@ -56,6 +57,11 @@ export function DataView() {
           onClick={() => void exportProjectZip(seed, meta, useStudio.getState().mediaMeta)}
         />
         <Row title="Exporter le seed" st="JSON" onClick={() => downloadJson(seed, "storyforge-seed-travail.json")} />
+        <Row title="Sauvegarder la session" st="JSON · textes, notes et images locales" action="Exporter" onClick={() => {
+          void createSession(seed, meta, useStudio.getState().mediaMeta)
+            .then((data) => downloadJson(data, "storyforge-v46-session.json"))
+            .catch((error: Error) => toast.error("Sauvegarde impossible : " + error.message));
+        }} />
         <Row title="Importer un seed" st="JSON" action="Choisir" onClick={() => void choose((d) => importSeed(d))} />
         <Row
           title="Restaurer une sauvegarde"

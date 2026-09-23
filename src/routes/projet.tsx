@@ -3,7 +3,7 @@ import { ProjectView } from "@/components/views/project-view";
 import { z } from "zod";
 
 const searchSchema = z.object({
-  tab: z.string().optional(),
+  tab: z.enum(["planches", "personnages", "notes", "fichiers", "mise-en-page"]).catch("planches").optional(),
   chapitre: z.string().optional(),
 });
 

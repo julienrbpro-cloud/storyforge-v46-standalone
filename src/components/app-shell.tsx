@@ -45,7 +45,7 @@ export function AppShell({
         {back}
         <div className="min-w-0 flex-1">{title ?? <Wordmark sub={sub ?? "Créer aujourd’hui les mondes de demain"} />}</div>
         <div className="flex items-center gap-2">
-          <span className="hidden text-[10px] tracking-wide text-subtle uppercase sm:inline">
+          <span role="status" className={cn("text-[10px] tracking-wide uppercase", saveState === "error" ? "text-danger" : "hidden text-subtle sm:inline")}>
             {saveState === "saving" ? "Enregistrement…" : saveState === "error" ? "Non enregistré" : "Enregistré"}
           </span>
           {showSearch ? (
