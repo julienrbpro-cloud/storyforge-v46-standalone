@@ -21,6 +21,7 @@ import { useStudio } from "@/lib/store";
 import { printStoryboard } from "@/lib/print";
 import { pickImage } from "@/lib/files";
 import { padPage } from "@/lib/utils";
+import { caseSize } from "@/lib/visual-layout";
 import { useEffect, useState } from "react";
 import { GUARDIANS } from "@/lib/constants";
 import { toast } from "sonner";
@@ -136,15 +137,26 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
                   {issues.length} alerte{issues.length > 1 ? "s" : ""} de cohérence — voir les notes.
                 </div>
               ) : null}
-              <div className="mx-auto grid max-w-[720px] grid-cols-2 gap-3">
-                {p.cases.map((c) => (
-                  <CaseCard
-                    key={c.id}
-                    panel={c}
-                    selected={selected === c.id}
-                    onSelect={() => openCase(c.id)}
-                  />
-                ))}
+              <div className="mx-auto grid w-full max-w-[900px] grid-cols-3 auto-rows-[300px] gap-3">
+                {p.cases.map((c) => {
+                  const size = caseSize(c);
+                  return (
+                    <div
+                      key={c.id}
+                      className="min-h-0 min-w-0"
+                      style={{
+                        gridColumn: `span ${size.width} / span ${size.width}`,
+                        gridRow: `span ${size.height} / span ${size.height}`,
+                      }}
+                    >
+                      <CaseCard
+                        panel={c}
+                        selected={selected === c.id}
+                        onSelect={() => openCase(c.id)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
               <button
                 type="button"
