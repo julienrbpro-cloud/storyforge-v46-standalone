@@ -76,6 +76,7 @@ export interface Personnage {
   nom: string;
   role?: string;
   note?: string;
+  image?: string | null;
 }
 
 export interface Gardien {
@@ -85,6 +86,7 @@ export interface Gardien {
   objets_permanents?: string[];
   fonction_protectrice?: string;
   evolution?: string;
+  image?: string | null;
 }
 
 export interface EditorialRule {

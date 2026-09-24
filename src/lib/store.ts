@@ -9,7 +9,7 @@ import {
   CASE_STATUSES,
 } from "./constants";
 import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIEL } from "./seed";
-import { dbReplace, putCaseImage } from "./media";
+import { dbReplace, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
@@ -52,6 +52,14 @@ interface StudioState {
   toggleCasePerson: (pid: string, cid: string, id: string, on: boolean) => void;
   setCaseGuardian: (pid: string, cid: string, gid: GuardianId, value: string) => void;
   setCaseSize: (pid: string, cid: string, key: "width" | "height", value: number) => void;
+  setLibraryEntityField: (
+    kind: "personnage" | "gardien",
+    id: string,
+    key: string,
+    value: unknown,
+  ) => void;
+  setEditorialRuleField: (id: string, key: "titre" | "contenu", value: string) => void;
+  replaceLibraryImage: (kind: "personnage" | "gardien", id: string, file: File) => Promise<void>;
   setTextField: (pid: string, cid: string, tid: string, key: string, value: unknown) => void;
   addText: (pid: string, cid: string) => void;
   removeText: (pid: string, cid: string, tid: string) => void;
@@ -287,6 +295,37 @@ export const useStudio = create<StudioState>((set, get) => {
       bump();
     },
 
+    setLibraryEntityField(kind, id, key, value) {
+      const seed = get().seed;
+      const target =
+        kind === "personnage"
+          ? seed.personnages.find((x) => x.id === id)
+          : seed.gardiens.find((x) => x.id === id);
+      if (!target) return;
+      (target as unknown as Record<string, unknown>)[key] = value;
+      bump();
+    },
+
+    setEditorialRuleField(id, key, value) {
+      const rule = get().seed.regles_editoriales.find((x) => x.id === id);
+      if (!rule) return;
+      rule[key] = value;
+      bump();
+    },
+
+    async replaceLibraryImage(kind, id, file) {
+      const seed = get().seed;
+      const target =
+        kind === "personnage"
+          ? seed.personnages.find((x) => x.id === id)
+          : seed.gardiens.find((x) => x.id === id);
+      if (!target) return;
+      const ref = await putImage(kind, id, file);
+      target.image = ref;
+      bump();
+      toast.success("Image de référence enregistrée");
+    },
+
     setTextField(pid, cid, tid, key, value) {
       const t = caseOf(get().seed, pid, cid)?.textes.find((x) => x.id === tid);
       if (!t || t.preserve_exact) return;
@@ -510,13 +549,28 @@ export const useStudio = create<StudioState>((set, get) => {
     },
 
     resetWorkingSeed() {
+      const current = get().seed;
       const images = new Map<string, string>();
-      for (const p of get().seed.planches) {
+      const personImages = new Map<string, string>();
+      const guardianImages = new Map<string, string>();
+      for (const p of current.planches) {
         for (const c of p.cases) if (c.image) images.set(c.id, c.image);
+      }
+      for (const person of current.personnages || []) {
+        if (person.image) personImages.set(person.id, person.image);
+      }
+      for (const guardian of current.gardiens || []) {
+        if (guardian.image) guardianImages.set(guardian.id, guardian.image);
       }
       const seed = clone(SEED_OFFICIEL);
       for (const p of seed.planches) {
         for (const c of p.cases) if (images.has(c.id)) c.image = images.get(c.id)!;
+      }
+      for (const person of seed.personnages || []) {
+        if (personImages.has(person.id)) person.image = personImages.get(person.id)!;
+      }
+      for (const guardian of seed.gardiens || []) {
+        if (guardianImages.has(guardian.id)) guardian.image = guardianImages.get(guardian.id)!;
       }
       const normalized = normalizeSeed(seed);
       const meta = emptyMeta();

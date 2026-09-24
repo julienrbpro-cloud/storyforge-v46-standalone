@@ -149,19 +149,23 @@ export async function blobToDataUrl(blob: Blob) {
   });
 }
 
-export async function putCaseImage(cid: string, file: File) {
+export async function putImage(ownerType: string, ownerId: string, file: File) {
   if (!file.type.startsWith("image/") || !file.size) throw new Error("Choisis un fichier image non vide.");
   const mid = uid("image");
   await dbPut({
     id: mid,
-    ownerType: "case",
-    ownerId: cid,
+    ownerType,
+    ownerId,
     blob: file,
     mime: file.type || "application/octet-stream",
     name: file.name || "image",
     createdAt: new Date().toISOString(),
   });
   return `idb://${mid}`;
+}
+
+export async function putCaseImage(cid: string, file: File) {
+  return putImage("case", cid, file);
 }
 
 export function imageExt(mime?: string, name = "") {

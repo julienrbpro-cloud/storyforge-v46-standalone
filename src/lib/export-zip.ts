@@ -141,7 +141,14 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
   const byId = new Map(records.map((r) => [r.id, r]));
   const portable = clone(seed);
   const entries: Array<{ name: string; data: Uint8Array | ArrayBuffer }> = [];
-  const manifest: Array<{ case_id: string | null; source: string; target: string; name: string | null }> = [];
+  const manifest: Array<{
+    case_id: string | null;
+    owner_type?: string;
+    owner_id?: string;
+    source: string;
+    target: string;
+    name: string | null;
+  }> = [];
   for (const p of portable.planches || []) {
     for (const c of p.cases || []) {
       if (!c.image) continue;
@@ -159,10 +166,51 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
       let path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
       if (entries.some((e) => e.name === path)) path = path.replace(/(\.[^.]+)$/, `-${manifest.length}$1`);
       entries.push({ name: path, data: await rec.blob.arrayBuffer() });
-      manifest.push({ case_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
+      manifest.push({ case_id: c.id, owner_type: "case", owner_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
       c.image = "./" + path;
     }
   }
+
+  async function addReferenceImage(
+    ownerType: "personnage" | "gardien",
+    ownerId: string,
+    source: string,
+  ) {
+    let rec;
+    if (source.startsWith("idb://")) rec = byId.get(source.slice(6));
+    else {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`Image de référence inaccessible : ${ownerId}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/")) throw new Error(`Image de référence invalide : ${ownerId}`);
+      rec = { blob, mime: blob.type, name: source.split("/").pop() };
+    }
+    if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${ownerId}`);
+    const ext = imageExt(rec.mime || rec.blob.type, rec.name);
+    const safeId = ownerId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    let path = `assets/references/${ownerType}-${safeId}.${ext}`;
+    if (entries.some((e) => e.name === path)) {
+      path = `assets/references/${ownerType}-${safeId}-${manifest.length}.${ext}`;
+    }
+    entries.push({ name: path, data: await rec.blob.arrayBuffer() });
+    manifest.push({
+      case_id: null,
+      owner_type: ownerType,
+      owner_id: ownerId,
+      source,
+      target: "./" + path,
+      name: rec.name || null,
+    });
+    return "./" + path;
+  }
+
+  for (const person of portable.personnages || []) {
+    if (person.image) person.image = await addReferenceImage("personnage", person.id, person.image);
+  }
+  for (const guardian of portable.gardiens || []) {
+    if (guardian.image) guardian.image = await addReferenceImage("gardien", guardian.id, guardian.image);
+  }
+
   const used = new Set(manifest.filter((x) => x.source.startsWith("idb://")).map((x) => x.source.slice(6)));
   for (const rec of records) {
     if (used.has(rec.id) || !rec.blob) continue;

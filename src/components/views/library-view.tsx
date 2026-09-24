@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
+import { CaseImage } from "@/components/case-image";
 import { PaperSheet, TabsBar } from "@/components/paper-sheet";
+import { Button } from "@/components/ui/button";
+import { Field, Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { OFFICIAL_REFS } from "@/lib/constants";
 import { allIssues } from "@/lib/coherence";
+import { pickImage } from "@/lib/files";
 import { useStudio } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const TABS = [
   ["personnages", "Personnages"],
@@ -13,26 +19,33 @@ const TABS = [
   ["coherence", "Cohérence"],
 ] as const;
 
+function officialImage(entityId: string) {
+  return OFFICIAL_REFS.find((r) => r.entityId === entityId)?.data || null;
+}
+
+function guardianTitle(id: string) {
+  if (id === "archiviste") return "Archiviste";
+  if (id === "armurier") return "Armurier";
+  return id;
+}
+
 export function LibraryView() {
   const seed = useStudio((s) => s.seed);
   const revision = useStudio((s) => s.revision);
+  const setEntityField = useStudio((s) => s.setLibraryEntityField);
+  const setRuleField = useStudio((s) => s.setEditorialRuleField);
+  const replaceLibraryImage = useStudio((s) => s.replaceLibraryImage);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("personnages");
   void revision;
 
-  const people = [
-    ...(seed.personnages || []).map((x) => ({
-      id: x.id,
-      title: x.nom || x.id,
-      role: x.role,
-      text: x.note || "",
-    })),
-    ...(seed.gardiens || []).map((x) => ({
-      id: x.id,
-      title: x.id === "archiviste" ? "Archiviste" : x.id === "armurier" ? "Armurier" : x.id,
-      role: x.role,
-      text: [x.fonction_protectrice, x.evolution].filter(Boolean).join(" — "),
-    })),
-  ];
+  async function chooseImage(kind: "personnage" | "gardien", id: string) {
+    try {
+      const file = await pickImage();
+      if (file) await replaceLibraryImage(kind, id, file);
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  }
 
   return (
     <AppShell title={<div className="font-display text-lg">Bibliothèque</div>} showSearch>
@@ -42,23 +55,111 @@ export function LibraryView() {
         </p>
         <PaperSheet>
           <TabsBar tabs={TABS} value={tab} onChange={(id) => setTab(id as (typeof TABS)[number][0])} />
+
           {tab === "personnages" ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              {people.map((e) => {
-                const main = OFFICIAL_REFS.find((r) => r.entityId === e.id);
+              {(seed.personnages || []).map((person) => {
+                const image = person.image || officialImage(person.id);
                 return (
-                  <article key={e.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
-                    {main ? (
-                      <img src={main.data} alt={e.title} className="h-40 w-full object-cover" />
-                    ) : (
-                      <div className="grid h-40 place-items-center bg-cream-2 font-display text-3xl text-accent">
-                        {e.title.slice(0, 1)}
-                      </div>
-                    )}
-                    <div className="p-3">
-                      <h4 className="font-display text-lg">{e.title}</h4>
-                      {e.role ? <div className="text-[11px] font-bold tracking-wide text-tab-on uppercase">{e.role}</div> : null}
-                      {e.text ? <p className="mt-1.5 text-[12.5px] leading-relaxed text-paper-muted">{e.text}</p> : null}
+                  <article key={person.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
+                    <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
+                      {image ? (
+                        <CaseImage src={image} alt={person.nom || person.id} className="h-full w-full object-contain" />
+                      ) : (
+                        <div className="font-display text-3xl text-accent">{(person.nom || person.id).slice(0, 1)}</div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="paper"
+                        size="sm"
+                        className="absolute right-2 bottom-2 rounded-md"
+                        onClick={() => void chooseImage("personnage", person.id)}
+                      >
+                        Remplacer l’image
+                      </Button>
+                    </div>
+                    <div className="space-y-2 p-3">
+                      <Field label="Nom">
+                        <Input
+                          value={person.nom || ""}
+                          onChange={(e) => setEntityField("personnage", person.id, "nom", e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Rôle">
+                        <Input
+                          value={person.role || ""}
+                          onChange={(e) => setEntityField("personnage", person.id, "role", e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Description">
+                        <Textarea
+                          value={person.note || ""}
+                          onChange={(e) => setEntityField("personnage", person.id, "note", e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                  </article>
+                );
+              })}
+
+              {(seed.gardiens || []).map((guardian) => {
+                const image = guardian.image || officialImage(guardian.id);
+                return (
+                  <article key={guardian.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
+                    <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
+                      {image ? (
+                        <CaseImage src={image} alt={guardianTitle(guardian.id)} className="h-full w-full object-contain" />
+                      ) : (
+                        <div className="font-display text-3xl text-accent">{guardianTitle(guardian.id).slice(0, 1)}</div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="paper"
+                        size="sm"
+                        className="absolute right-2 bottom-2 rounded-md"
+                        onClick={() => void chooseImage("gardien", guardian.id)}
+                      >
+                        Remplacer l’image
+                      </Button>
+                    </div>
+                    <div className="space-y-2 p-3">
+                      <h4 className="font-display text-lg">{guardianTitle(guardian.id)}</h4>
+                      <Field label="Rôle">
+                        <Input
+                          value={guardian.role || ""}
+                          onChange={(e) => setEntityField("gardien", guardian.id, "role", e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Fonction protectrice">
+                        <Textarea
+                          value={guardian.fonction_protectrice || ""}
+                          onChange={(e) =>
+                            setEntityField("gardien", guardian.id, "fonction_protectrice", e.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field label="Évolution">
+                        <Textarea
+                          value={guardian.evolution || ""}
+                          onChange={(e) => setEntityField("gardien", guardian.id, "evolution", e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Objets permanents">
+                        <Textarea
+                          value={(guardian.objets_permanents || []).join("\n")}
+                          onChange={(e) =>
+                            setEntityField(
+                              "gardien",
+                              guardian.id,
+                              "objets_permanents",
+                              e.target.value
+                                .split("\n")
+                                .map((x) => x.trim())
+                                .filter(Boolean),
+                            )
+                          }
+                        />
+                      </Field>
                     </div>
                   </article>
                 );
@@ -67,12 +168,23 @@ export function LibraryView() {
           ) : null}
 
           {tab === "regles" ? (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {(seed.regles_editoriales || []).length ? (
-                (seed.regles_editoriales || []).map((r) => (
-                  <article key={r.id} className="rounded-xl border border-paper-line bg-paper p-3">
-                    <h5 className="mb-1 font-display text-base">{r.titre}</h5>
-                    <p className="text-[12.5px] leading-relaxed text-paper-muted">{r.contenu}</p>
+                (seed.regles_editoriales || []).map((rule) => (
+                  <article key={rule.id} className="space-y-2 rounded-xl border border-paper-line bg-paper p-3">
+                    <Field label="Titre">
+                      <Input
+                        value={rule.titre}
+                        onChange={(e) => setRuleField(rule.id, "titre", e.target.value)}
+                      />
+                    </Field>
+                    <Field label="Contenu">
+                      <Textarea
+                        className="min-h-28"
+                        value={rule.contenu}
+                        onChange={(e) => setRuleField(rule.id, "contenu", e.target.value)}
+                      />
+                    </Field>
                   </article>
                 ))
               ) : (
