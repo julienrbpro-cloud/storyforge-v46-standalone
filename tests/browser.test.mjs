@@ -113,8 +113,21 @@ try {
     await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
     const resizedCard = page.getByRole("button").filter({ hasText: "QA description" }).first();
     const resizedCell = resizedCard.locator("..");
-    assert.match((await resizedCell.getAttribute("style")) || "", /grid-column:\s*span 2/);
-    assert.match((await resizedCell.getAttribute("style")) || "", /grid-row:\s*span 2/);
+    const resizedGrid = await resizedCell.evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        columnStart: style.gridColumnStart,
+        columnEnd: style.gridColumnEnd,
+        rowStart: style.gridRowStart,
+        rowEnd: style.gridRowEnd,
+      };
+    });
+    assert.deepEqual(resizedGrid, {
+      columnStart: "span 2",
+      columnEnd: "span 2",
+      rowStart: "span 2",
+      rowEnd: "span 2",
+    });
     assert.equal(
       await resizedCard.locator("img").first().evaluate((img) => getComputedStyle(img).objectFit),
       "contain",
