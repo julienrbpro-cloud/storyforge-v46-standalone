@@ -35,6 +35,10 @@ export function LibraryView() {
   const setEntityField = useStudio((s) => s.setLibraryEntityField);
   const setRuleField = useStudio((s) => s.setEditorialRuleField);
   const replaceLibraryImage = useStudio((s) => s.replaceLibraryImage);
+  const activeProjectId = useStudio((s) => s.activeProjectId);
+  const addPerson = useStudio((s) => s.addLibraryPerson);
+  const addGuardian = useStudio((s) => s.addLibraryGuardian);
+  const addRule = useStudio((s) => s.addEditorialRule);
   const [tab, setTab] = useState<(typeof TABS)[number][0]>("personnages");
   void revision;
 
@@ -59,7 +63,7 @@ export function LibraryView() {
           {tab === "personnages" ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {(seed.personnages || []).map((person) => {
-                const image = person.image || officialImage(person.id);
+                const image = person.image || (activeProjectId === "original" ? officialImage(person.id) : null);
                 return (
                   <article key={person.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
                     <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
@@ -103,14 +107,14 @@ export function LibraryView() {
               })}
 
               {(seed.gardiens || []).map((guardian) => {
-                const image = guardian.image || officialImage(guardian.id);
+                const image = guardian.image || (activeProjectId === "original" ? officialImage(guardian.id) : null);
                 return (
                   <article key={guardian.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
                     <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
                       {image ? (
-                        <CaseImage src={image} alt={guardianTitle(guardian.id)} className="h-full w-full object-contain" />
+                        <CaseImage src={image} alt={guardian.nom || guardianTitle(guardian.id)} className="h-full w-full object-contain" />
                       ) : (
-                        <div className="font-display text-3xl text-accent">{guardianTitle(guardian.id).slice(0, 1)}</div>
+                        <div className="font-display text-3xl text-accent">{(guardian.nom || guardianTitle(guardian.id)).slice(0, 1)}</div>
                       )}
                       <Button
                         type="button"
@@ -123,7 +127,9 @@ export function LibraryView() {
                       </Button>
                     </div>
                     <div className="space-y-2 p-3">
-                      <h4 className="font-display text-lg">{guardianTitle(guardian.id)}</h4>
+                      <Field label="Nom">
+                        <Input value={guardian.nom || guardianTitle(guardian.id)} onChange={(e) => setEntityField("gardien", guardian.id, "nom", e.target.value)} />
+                      </Field>
                       <Field label="Rôle">
                         <Input
                           value={guardian.role || ""}
@@ -164,6 +170,10 @@ export function LibraryView() {
                   </article>
                 );
               })}
+              <div className="col-span-full flex flex-wrap gap-2">
+                <Button variant="paper" onClick={addPerson}>Ajouter un personnage</Button>
+                {seed.gardiens.length < 2 ? <Button variant="paper" onClick={addGuardian}>Ajouter un gardien</Button> : null}
+              </div>
             </div>
           ) : null}
 
@@ -192,6 +202,7 @@ export function LibraryView() {
                   Aucune règle éditoriale.
                 </div>
               )}
+              <Button variant="paper" className="w-full" onClick={addRule}>Ajouter une règle</Button>
             </div>
           ) : null}
 

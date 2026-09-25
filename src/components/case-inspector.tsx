@@ -203,7 +203,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
               const value = o == null ? "inherit" : o.present === false ? "absent" : String(o.niveau);
               return (
                 <label key={gid} className="text-[11px] font-extrabold text-paper-muted">
-                  {label}
+                  {seed.gardiens.find((g) => g.id === gid)?.nom || label}
                   <select
                     className="mt-1 h-11 w-full rounded-md border border-paper-line bg-paper font-normal text-paper-ink"
                     value={value}

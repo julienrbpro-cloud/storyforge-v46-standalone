@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { blobToDataUrl, dataUrlToBlob, dbAll, type MediaRecord } from "./media";
+import { activeProjectMedia, blobToDataUrl, dataUrlToBlob, dbAll, type MediaRecord } from "./media";
 import { clone, normalizeMeta, parseSeed } from "./seed";
 import { APP_VERSION } from "./constants";
 import type { Meta, Seed } from "./types";
@@ -34,7 +34,7 @@ export async function createSession(
   // Snapshot before asynchronous file reads, so typing during export cannot mix revisions.
   const snapshot = { seed: clone(seed), meta: clone(meta), media_meta: clone(mediaMeta) };
   const media = await Promise.all(
-    (records ?? (await dbAll())).map(async ({ blob, ...record }) => ({
+    activeProjectMedia(records ?? (await dbAll()), seed).map(async ({ blob, ...record }) => ({
       ...record,
       data: await blobToDataUrl(blob),
     })),

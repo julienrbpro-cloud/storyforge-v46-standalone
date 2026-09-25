@@ -257,7 +257,7 @@ export function peopleOf(seed: Seed) {
     ...(seed.personnages || []).map((p) => ({ id: p.id, nom: p.nom || p.id })),
     ...(seed.gardiens || []).map((g) => ({
       id: g.id,
-      nom: g.id === "archiviste" ? "Archiviste" : g.id === "armurier" ? "Armurier" : g.id,
+      nom: g.nom || (g.id === "archiviste" ? "Archiviste" : g.id === "armurier" ? "Armurier" : g.id),
     })),
   ];
 }

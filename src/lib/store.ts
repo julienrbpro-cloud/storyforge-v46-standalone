@@ -4,12 +4,13 @@ import {
   LS_MEDIA_META,
   LS_META,
   LS_META_LEGACY,
+  LS_PROJECTS,
   LS_SEED,
   PAGE_STATUSES,
   CASE_STATUSES,
 } from "./constants";
 import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIEL } from "./seed";
-import { dbReplace, putCaseImage, putImage } from "./media";
+import { dbAll, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
@@ -23,6 +24,9 @@ import type {
   Seed,
 } from "./types";
 
+type SavedProject = { id: string; seed: Seed; meta: Meta; mediaMeta: Record<string, unknown[]> };
+type ProjectArchive = { activeId: string; projects: SavedProject[] };
+
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 interface StudioState {
@@ -33,6 +37,8 @@ interface StudioState {
   seed: Seed;
   meta: Meta;
   mediaMeta: Record<string, unknown[]>;
+  projects: Array<{ id: string; title: string }>;
+  activeProjectId: string;
   selectedCaseId: string | null;
   visualPageIndex: number;
   readingMode: boolean;
@@ -59,6 +65,9 @@ interface StudioState {
     value: unknown,
   ) => void;
   setEditorialRuleField: (id: string, key: "titre" | "contenu", value: string) => void;
+  addLibraryPerson: () => void;
+  addLibraryGuardian: () => void;
+  addEditorialRule: () => void;
   replaceLibraryImage: (kind: "personnage" | "gardien", id: string, file: File) => Promise<void>;
   setTextField: (pid: string, cid: string, tid: string, key: string, value: unknown) => void;
   addText: (pid: string, cid: string) => void;
@@ -70,6 +79,8 @@ interface StudioState {
   removeOverlay: (pid: string, cid: string, oid: string) => void;
   addCase: (pid: string) => void;
   addPlanche: () => string;
+  addProject: (title: string) => boolean;
+  openProject: (id: string) => void;
   deletePlanche: (id: string) => void;
   deleteCase: (pid: string, cid: string) => void;
   movePage: (id: string, dir: number) => void;
@@ -149,6 +160,8 @@ export const useStudio = create<StudioState>((set, get) => {
     seed: normalizeSeed(SEED_OFFICIEL),
     meta: emptyMeta(),
     mediaMeta: {},
+    projects: [],
+    activeProjectId: "original",
     selectedCaseId: null,
     visualPageIndex: 0,
     readingMode: false,
@@ -176,7 +189,12 @@ export const useStudio = create<StudioState>((set, get) => {
           meta.statuts[p.id] = inferPageStatus(p);
         }
       }
-      set({ seed, meta, mediaMeta, ready: true, recoveryRequired, saveState: recoveryRequired ? "error" : "saved" });
+      const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
+      const projects = archive?.projects?.length ? archive.projects : [{ id: "original", seed, meta, mediaMeta }];
+      const active = projects.find((x) => x.id === archive?.activeId);
+      // The existing local snapshot is authoritative for the currently open project.
+      const activeId = active?.id || projects[0].id;
+      set({ seed, meta, mediaMeta, projects: projects.map((x) => ({ id: x.id, title: x.id === activeId ? seed.projet.titre : x.seed.projet.titre })), activeProjectId: activeId, ready: true, recoveryRequired, saveState: recoveryRequired ? "error" : "saved" });
     },
 
     persistNow() {
@@ -186,6 +204,15 @@ export const useStudio = create<StudioState>((set, get) => {
       try {
         const { seed, meta, mediaMeta } = get();
         saveLocalSnapshot(seed, meta, mediaMeta);
+        const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
+        const projects = archive?.projects?.length ? archive.projects : [];
+        const activeId = get().activeProjectId;
+        const record = { id: activeId, seed, meta, mediaMeta };
+        const index = projects.findIndex((p) => p.id === activeId);
+        if (index >= 0) projects[index] = record;
+        else projects.push(record);
+        localStorage.setItem(LS_PROJECTS, JSON.stringify({ activeId, projects }));
+        set({ projects: projects.map((x) => ({ id: x.id, title: x.seed.projet.titre })) });
         set({ saveState: "saved" });
       } catch {
         set({ saveState: "error" });
@@ -310,6 +337,23 @@ export const useStudio = create<StudioState>((set, get) => {
       const rule = get().seed.regles_editoriales.find((x) => x.id === id);
       if (!rule) return;
       rule[key] = value;
+      bump();
+    },
+
+    addLibraryPerson() {
+      get().seed.personnages.push({ id: uid("person"), nom: "Nouveau personnage", role: "", note: "" });
+      bump();
+    },
+
+    addLibraryGuardian() {
+      const id = (["archiviste", "armurier"] as const).find((candidate) => !get().seed.gardiens.some((guardian) => guardian.id === candidate));
+      if (!id) return;
+      get().seed.gardiens.push({ id, nom: "Nouveau gardien", role: "", fonction_protectrice: "", evolution: "" });
+      bump();
+    },
+
+    addEditorialRule() {
+      get().seed.regles_editoriales.push({ id: uid("rule"), titre: "Nouvelle règle", contenu: "" });
       bump();
     },
 
@@ -468,6 +512,49 @@ export const useStudio = create<StudioState>((set, get) => {
       return id;
     },
 
+    addProject(title) {
+      if (!title.trim() || get().recoveryRequired) return false;
+      get().persistNow();
+      if (get().saveState === "error") return false;
+      const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
+      if (!archive) return false;
+      const id = uid("project");
+      const seed = normalizeSeed({ ...clone(SEED_OFFICIEL), _meta: { format_version: "1.0", statut_canonique: "local" }, avant_propos: {}, projet: { titre: title.trim(), version: "V1", sous_titre: "" }, planches: [], personnages: [], gardiens: [], regles_editoriales: [], choix_editoriaux_ouverts: [] });
+      const meta = emptyMeta();
+      const mediaMeta = {};
+      const snapshot = captureRawLocalSnapshot();
+      try {
+        saveLocalSnapshot(seed, meta, mediaMeta);
+        localStorage.setItem(LS_PROJECTS, JSON.stringify({ activeId: id, projects: [...archive.projects, { id, seed, meta, mediaMeta }] }));
+      } catch {
+        try { restoreRawLocalSnapshot(snapshot); } catch { /* Original snapshot remains in the archive. */ }
+        toast.error("Impossible d’enregistrer le nouveau projet");
+        return false;
+      }
+      set({ seed, meta, mediaMeta, activeProjectId: id, projects: [...get().projects, { id, title: title.trim() }], selectedCaseId: null, revision: get().revision + 1 });
+      toast.success("Projet créé");
+      return true;
+    },
+
+    openProject(id) {
+      if (id === get().activeProjectId || get().recoveryRequired) return;
+      get().persistNow();
+      if (get().saveState === "error") return;
+      const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
+      const project = archive?.projects.find((p) => p.id === id);
+      if (!archive || !project) return;
+      const snapshot = captureRawLocalSnapshot();
+      try {
+        saveLocalSnapshot(project.seed, project.meta, project.mediaMeta);
+        localStorage.setItem(LS_PROJECTS, JSON.stringify({ ...archive, activeId: id }));
+      } catch {
+        try { restoreRawLocalSnapshot(snapshot); } catch { /* Original snapshot remains in the archive. */ }
+        toast.error("Impossible d’ouvrir ce projet");
+        return;
+      }
+      set({ seed: project.seed, meta: project.meta, mediaMeta: project.mediaMeta, activeProjectId: id, selectedCaseId: null, revision: get().revision + 1 });
+    },
+
     deletePlanche(id) {
       const seed = get().seed;
       seed.planches = seed.planches.filter((p) => p.id !== id);
@@ -603,7 +690,11 @@ export const useStudio = create<StudioState>((set, get) => {
       if (persistTimer) clearTimeout(persistTimer);
       persistTimer = null;
       saveLocalSnapshot(restored.seed, restored.meta, restored.mediaMeta);
-      try { await dbReplace(restored.records); }
+      try {
+        const otherIds = otherProjectMediaIds();
+        const preserved = (await dbAll()).filter((record) => otherIds.has(record.id));
+        await dbReplace([...preserved, ...restored.records]);
+      }
       catch (error) {
         try {
           restoreRawLocalSnapshot(previousLocal);

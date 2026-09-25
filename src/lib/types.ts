@@ -81,6 +81,7 @@ export interface Personnage {
 
 export interface Gardien {
   id: GuardianId | string;
+  nom?: string;
   personnage_id?: string;
   role?: string;
   objets_permanents?: string[];

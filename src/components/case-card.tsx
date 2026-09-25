@@ -9,10 +9,12 @@ export function CaseCard({
   panel,
   selected,
   onSelect,
+  compact = false,
 }: {
   panel: PanelCase;
   selected?: boolean;
   onSelect: () => void;
+  compact?: boolean;
 }) {
   const { title, desc } = caseCaption(panel);
   const quote = (panel.textes || []).find((t) => t.contenu)?.contenu;
@@ -22,7 +24,7 @@ export function CaseCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "flex h-full flex-col overflow-hidden rounded-xl border border-black/20 bg-paper text-left text-paper-ink transition-[box-shadow,transform] duration-150",
+        "relative flex h-full w-full flex-col overflow-hidden rounded-md border border-black/20 bg-paper text-left text-paper-ink transition-[box-shadow,transform] duration-150",
         selected ? "ring-2 ring-accent ring-offset-2 ring-offset-cream" : "hover:border-black/40",
       )}
     >
@@ -38,7 +40,11 @@ export function CaseCard({
           {panel.numero}
         </span>
       </div>
-      <div className="px-2.5 py-2">
+      {compact ? (
+        <span className="absolute inset-x-0 bottom-0 line-clamp-2 bg-paper/90 px-1 py-0.5 text-[9px] leading-tight">
+          {title || desc || "Case sans description"}
+        </span>
+      ) : <div className="px-2.5 py-2">
         <p className="line-clamp-4 text-[12px] leading-snug">
           <b className="font-bold">
             {panel.numero}
@@ -51,7 +57,7 @@ export function CaseCard({
             « {quote} »
           </p>
         ) : null}
-      </div>
+      </div>}
     </button>
   );
 }

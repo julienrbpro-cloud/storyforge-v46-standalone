@@ -11,7 +11,8 @@ const output = process.env.STORYFORGE_TEST_OUTPUT || "/workspace/screenshots/sto
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
   headless: true,
-  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  ...(process.env.STORYFORGE_CHROMIUM ? { executablePath: process.env.STORYFORGE_CHROMIUM } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--use-angle=swiftshader", "--disable-vulkan"],
 });
 const pixel = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aC1sAAAAASUVORK5CYII=",
@@ -57,6 +58,24 @@ try {
     );
     await page.screenshot({ animations: "disabled", path: join(output, `home-${width}.png`) });
     pass("entry and canonical 29-page / 152-case project");
+    await page.getByRole("button", { name: "Nouveau projet" }).click();
+    await page.getByRole("dialog").getByLabel("Nom du projet").fill("Projet QA");
+    await page.getByRole("dialog").getByRole("button", { name: "Créer le projet" }).click();
+    await page.getByText("Aucune planche pour ce filtre.").waitFor();
+    await click("Nouvelle planche");
+    await click("Ajouter une case");
+    const newCase = page.getByRole("dialog", { name: "Case 1", exact: true });
+    await newCase.getByText("Options avancées").click();
+    await newCase.getByLabel("Largeur grille").selectOption("2");
+    await newCase.getByLabel("Hauteur grille").selectOption("2");
+    await newCase.getByRole("button", { name: "Fermer" }).click();
+    assert.equal(await page.locator(".visual-grid > div").first().evaluate((el) => getComputedStyle(el).gridColumnEnd), "span 2");
+    assert.equal(await page.locator(".visual-grid").count(), 1);
+    await page.goto(base + "/atelier");
+    await page.getByRole("button", { name: "Nous, malgré nous" }).click();
+    await page.getByText("MÉTRO PAPINEAU", { exact: true }).waitFor();
+    await page.goto(base + "/atelier");
+    pass("global plus creates a separate project and case edits return to its 3x3 grid");
     await page.locator('a[href*="chapitre"]').first().click();
     await page.waitForURL("**/projet?*");
     await page.getByRole("button", { name: "Tout voir", exact: true }).waitFor();
@@ -111,7 +130,7 @@ try {
     await dialog.locator(".case-canvas img").waitFor();
     await page.screenshot({ animations: "disabled", path: join(output, `editor-${width}.png`) });
     await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
-    const resizedCard = page.getByRole("button").filter({ hasText: "QA description" }).first();
+    const resizedCard = page.locator(".visual-grid button").first();
     const resizedCell = resizedCard.locator("..");
     const resizedGrid = await resizedCell.evaluate((el) => {
       const style = getComputedStyle(el);
@@ -122,31 +141,27 @@ try {
         rowEnd: style.gridRowEnd,
       };
     });
-    assert.deepEqual(resizedGrid, {
-      columnStart: "span 2",
-      columnEnd: "span 2",
-      rowStart: "span 2",
-      rowEnd: "span 2",
-    });
+    assert.equal(resizedGrid.columnEnd, "span 2");
+    assert.equal(resizedGrid.rowEnd, "span 2");
     assert.equal(
       await resizedCard.locator("img").first().evaluate((img) => getComputedStyle(img).objectFit),
       "contain",
     );
     pass("case editor, image upload, visible lettering, drag, size, full-image fit and prompt");
-    await click("Notes");
+    await page.getByText("Détails de la planche et gardiens").click();
     await page.getByLabel("Note de production", { exact: true }).fill("Note QA P01");
     await page.getByLabel("Archiviste", { exact: true }).selectOption("2");
-    await click("Notes");
+    await page.getByText("Détails de la planche et gardiens").click();
     await page.keyboard.press("j");
     await page.waitForURL("**/planche/P02");
     if ((await page.getByLabel("Note de production", { exact: true }).count()) === 0)
-      await click("Notes");
+      await page.getByText("Détails de la planche et gardiens").click();
     assert.equal(await page.getByLabel("Note de production", { exact: true }).inputValue(), "");
-    await click("Notes");
+    await page.getByText("Détails de la planche et gardiens").click();
     await page.keyboard.press("k");
     await page.waitForURL("**/planche/P01");
     if ((await page.getByLabel("Note de production", { exact: true }).count()) === 0)
-      await click("Notes");
+      await page.getByText("Détails de la planche et gardiens").click();
     assert.equal(
       await page.getByLabel("Note de production", { exact: true }).inputValue(),
       "Note QA P01",
@@ -154,21 +169,20 @@ try {
     pass("notes stay attached to their own page and keyboard navigation");
     await waitSaved();
     await page.reload();
-    await click("Notes");
+    await page.getByText("Détails de la planche et gardiens").click();
     assert.equal(
       await page.getByLabel("Note de production", { exact: true }).inputValue(),
       "Note QA P01",
     );
     assert.equal(await page.getByLabel("Archiviste", { exact: true }).inputValue(), "2");
     pass("reload keeps edits and guardian state");
-    await page.goto(base + "/projet?tab=mise-en-page");
-    await page.getByText("Mise en page du récit · 3 × 3", { exact: true }).waitFor();
-    const tile = page.getByRole("button", { name: "P01-1 · 2×2", exact: true });
-    assert.equal(await tile.count(), 1);
-    await tile.click();
+    await page.goto(base + "/planche/P01");
+    await page.locator(".visual-grid").waitFor();
+    assert.equal(await page.locator(".visual-grid").count(), 1);
+    await page.locator(".visual-grid button").first().click();
     await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
     await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
-    pass("3x3 layout applies dimensions and opens the selected case");
+    pass("one 3x3 grid applies dimensions and opens the selected case");
     await page.goto(base + "/projet");
     await page.getByRole("button", { name: "Rechercher", exact: true }).click();
     await page.getByPlaceholder("Planche, case, personnage…").fill("QA description");

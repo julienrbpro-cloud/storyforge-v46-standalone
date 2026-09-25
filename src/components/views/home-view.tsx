@@ -11,6 +11,9 @@ import { padPage } from "@/lib/utils";
 export function HomeView() {
   const seed = useStudio((s) => s.seed);
   const meta = useStudio((s) => s.meta);
+  const projects = useStudio((s) => s.projects);
+  const activeProjectId = useStudio((s) => s.activeProjectId);
+  const openProject = useStudio((s) => s.openProject);
   const revision = useStudio((s) => s.revision);
   const navigate = useNavigate();
   void revision;
@@ -30,13 +33,16 @@ export function HomeView() {
             </Link>
           </div>
           <Link to="/projet" className="block overflow-hidden rounded-2xl border border-line bg-panel">
-            <div className="relative h-[150px] overflow-hidden bg-panel-2 lg:h-[220px]">
-              <img src="/assets/cover.jpg" alt="" className="h-full w-full object-cover" />
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-panel via-transparent to-transparent" />
+            <div className="relative flex h-[330px] items-center justify-center overflow-hidden bg-[#15110e] lg:h-[370px]">
+              {activeProjectId === "original" ? (
+                <img src="/assets/nous-malgre-nous-cover.png" alt="Couverture de Nous, malgré nous" className="h-full w-full object-contain" />
+              ) : (
+                <span className="px-8 text-center font-display text-3xl text-cream">{seed.projet.titre}</span>
+              )}
             </div>
             <div className="px-4 py-3.5">
               <h4 className="font-display text-[22px]">{seed.projet.titre}</h4>
-              <div className="mt-1 text-xs tracking-wide text-muted">{PROJECT_GENRES}</div>
+              {activeProjectId === "original" ? <div className="mt-1 text-xs tracking-wide text-muted">{PROJECT_GENRES}</div> : null}
               <ProgressBar value={prog.pct} className="my-3" />
               <div className="text-xs text-muted">{prog.label}</div>
               {seed.projet.sous_titre ? (
@@ -46,6 +52,16 @@ export function HomeView() {
               ) : null}
             </div>
           </Link>
+          {projects.length > 1 ? (
+            <div className="mt-4 space-y-2">
+              <h3 className="font-display text-lg">Autres projets</h3>
+              {projects.filter((p) => p.id !== activeProjectId).map((project) => (
+                <button key={project.id} type="button" className="w-full rounded-xl border border-line bg-panel p-3 text-left text-sm hover:border-accent/40" onClick={() => { openProject(project.id); void navigate({ to: "/projet" }); }}>
+                  {project.title}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 lg:mt-0">
@@ -106,7 +122,7 @@ export function HomeView() {
             })}
           </div>
           <p className="mt-4 text-center text-[11px] text-subtle">
-            {totalCases(seed)} cases dans le manuscrit · {seed.projet.version}
+            {totalCases(seed)} cases dans {activeProjectId === "original" ? "le manuscrit" : "le projet"} · {seed.projet.version}
           </p>
         </div>
       </div>

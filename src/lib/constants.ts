@@ -76,4 +76,5 @@ export const LS_SEED = "sf46-seed";
 export const LS_META = "sf46-meta-v3";
 export const LS_META_LEGACY = "sf46-meta";
 export const LS_MEDIA_META = "sf46-media-meta";
+export const LS_PROJECTS = "sf46-projects-v1";
 export const LS_SEEN = "sf46-seen-splash";

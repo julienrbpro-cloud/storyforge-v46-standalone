@@ -1,4 +1,34 @@
 import { uid } from "./utils";
+import { LS_PROJECTS } from "./constants";
+import type { Seed } from "./types";
+
+export function referencedMediaIds(seed: Seed): Set<string> {
+  const refs = [
+    ...seed.planches.flatMap((p) => p.cases.map((c) => c.image)),
+    ...seed.personnages.map((p) => p.image),
+    ...seed.gardiens.map((g) => g.image),
+  ];
+  return new Set(refs.filter((ref): ref is string => !!ref && ref.startsWith("idb://")).map((ref) => ref.slice(6)));
+}
+
+export function otherProjectMediaIds(): Set<string> {
+  const ids = new Set<string>();
+  try {
+    const archive = JSON.parse(localStorage.getItem(LS_PROJECTS) || "null") as {
+      activeId: string; projects: Array<{ id: string; seed: Seed }>;
+    } | null;
+    for (const project of archive?.projects || []) {
+      if (project.id !== archive?.activeId) for (const id of referencedMediaIds(project.seed)) ids.add(id);
+    }
+  } catch { /* Legacy sessions have no project archive. */ }
+  return ids;
+}
+
+export function activeProjectMedia(records: MediaRecord[], seed: Seed): MediaRecord[] {
+  const other = otherProjectMediaIds();
+  const current = referencedMediaIds(seed);
+  return records.filter((record) => !other.has(record.id) || current.has(record.id));
+}
 
 const DB_NAME = "storyforge-v46-media";
 const STORE = "media";

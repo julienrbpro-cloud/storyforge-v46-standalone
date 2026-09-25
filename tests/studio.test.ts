@@ -4,7 +4,7 @@ import "fake-indexeddb/auto";
 import { SEED_OFFICIEL, normalizeSeed, parseSeed, normalizeMeta, emptyMeta } from "../src/lib/seed";
 import { useStudio } from "../src/lib/store";
 import { dataUrlToBlob, dbAll, dbPut, dbReplace, openDB } from "../src/lib/media";
-import { LS_MEDIA_META, LS_META, LS_SEED } from "../src/lib/constants";
+import { LS_MEDIA_META, LS_META, LS_PROJECTS, LS_SEED } from "../src/lib/constants";
 import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
 import { checkPage, choiceFor } from "../src/lib/coherence";
@@ -159,6 +159,31 @@ test("backup round trip preserves images, text, notes, status and restores actua
   assert.equal(state.meta.statuts[p.id], "brouillon");
   assert.equal(await records[0].blob.text(), "image-bytes");
   assert.equal(state.seed.planches[0].cases[0].image, `idb://${records[0].id}`);
+});
+
+test("restoring one project preserves the other project's images and excludes them from its backup", async () => {
+  const s = fresh();
+  const other = normalizeSeed(SEED_OFFICIEL);
+  s.seed.planches[0].cases[0].image = "idb://current-photo";
+  other.planches[0].cases[0].image = "idb://other-photo";
+  const previousArchive = storage.get(LS_PROJECTS);
+  storage.set(LS_PROJECTS, JSON.stringify({ activeId: "original", projects: [
+    { id: "original", seed: s.seed, meta: s.meta, mediaMeta: {} },
+    { id: "other", seed: other, meta: emptyMeta(), mediaMeta: {} },
+  ] }));
+  try {
+    await dbReplace([
+      { id: "current-photo", blob: new Blob(["current"], { type: "image/png" }) },
+      { id: "other-photo", blob: new Blob(["other"], { type: "image/png" }) },
+    ]);
+    const backup = await createSession(s.seed, s.meta, {});
+    assert.deepEqual(backup.media.map((record) => record.id), ["current-photo"]);
+    await s.importSessionJson(backup);
+    assert.deepEqual((await dbAll()).map((record) => record.id).sort(), ["current-photo", "other-photo"]);
+  } finally {
+    if (previousArchive == null) storage.delete(LS_PROJECTS);
+    else storage.set(LS_PROJECTS, previousArchive);
+  }
 });
 
 test("invalid and incomplete backups never clear existing images or manuscript", async () => {

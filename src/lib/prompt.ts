@@ -1,9 +1,10 @@
 import { GUARDIANS } from "./constants";
-import { typeInfo } from "./seed";
+import { SEED_OFFICIEL, typeInfo } from "./seed";
 import { choiceFor, effectiveGuardian } from "./coherence";
 import type { PanelCase, Planche, Seed } from "./types";
 
 export function relevantRules(seed: Seed, c: PanelCase) {
+  if (seed._meta?.statut_canonique === "local") return seed.regles_editoriales || [];
   const ids = new Set(["PRINCIPE_VISUEL", "R_GLE_DITORIALE_V4_6"]);
   const people = new Set(c.personnages || []);
   if (people.has("archiviste"))
@@ -16,7 +17,9 @@ export function relevantRules(seed: Seed, c: PanelCase) {
     );
   if (people.has("arlo")) ["ARLO", "LETTRAGE_DES_INTERVENTIONS_D_ARLO"].forEach((x) => ids.add(x));
   if ((c.description || "").toLowerCase().includes("perle")) ids.add("LA_PETITE_PERLE");
-  return (seed.regles_editoriales || []).filter((r) => ids.has(r.id));
+  return (seed.regles_editoriales || []).filter((r) =>
+    ids.has(r.id) || !SEED_OFFICIEL.regles_editoriales.some((official) => official.id === r.id),
+  );
 }
 
 export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
@@ -39,7 +42,7 @@ export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
   const rules = relevantRules(seed, c)
     .map((r) => `### ${r.titre}\n${r.contenu}`)
     .join("\n\n");
-  return `CRÉATION D’UNE CASE DE BANDE DESSINÉE — NOUS, MALGRÉ NOUS V4.6
+  return `CRÉATION D’UNE CASE DE BANDE DESSINÉE — ${seed.projet.titre} ${seed.projet.version}
 
 Planche ${p.numero} — ${p.titre}
 Case ${c.numero}${c.titre ? " — " + c.titre : ""}

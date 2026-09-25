@@ -1,5 +1,5 @@
 import { clone } from "./seed";
-import { dbAll, imageExt } from "./media";
+import { activeProjectMedia, dbAll, imageExt } from "./media";
 import type { Meta, Seed } from "./types";
 import { createSession } from "./session";
 import { toast } from "sonner";
@@ -137,7 +137,7 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
   meta = clone(meta);
   mediaMeta = clone(mediaMeta);
   const enc = new TextEncoder();
-  const records = await dbAll();
+  const records = activeProjectMedia(await dbAll(), seed);
   const byId = new Map(records.map((r) => [r.id, r]));
   const portable = clone(seed);
   const entries: Array<{ name: string; data: Uint8Array | ArrayBuffer }> = [];

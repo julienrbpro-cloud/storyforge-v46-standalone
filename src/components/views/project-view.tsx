@@ -14,26 +14,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { OFFICIAL_REFS } from "@/lib/constants";
 import { checkPage } from "@/lib/coherence";
-import { peopleOf } from "@/lib/seed";
 import { filteredPages, useStudio } from "@/lib/store";
 import { exportProjectZip, downloadJson } from "@/lib/export-zip";
 import { printStoryboard } from "@/lib/print";
 import { progressOf, PROJECT_GENRES, shortChapter } from "@/lib/project";
 import { padPage } from "@/lib/utils";
-import { VisualLayout } from "@/components/visual-layout";
 
 const TABS = [
   ["planches", "Planches"],
-  ["personnages", "Personnages"],
-  ["notes", "Notes"],
-  ["fichiers", "Fichiers"],
-  ["mise-en-page", "Mise en page"],
+  ["fichiers", "Exports"],
 ] as const;
 
 export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS)[number][0]; chapitre?: string }) {
   const seed = useStudio((s) => s.seed);
+  const activeProjectId = useStudio((s) => s.activeProjectId);
   const meta = useStudio((s) => s.meta);
   const revision = useStudio((s) => s.revision);
   const setFilter = useStudio((s) => s.setFilter);
@@ -46,7 +41,6 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS
   void revision;
   const pages = filteredPages(seed, meta);
   const prog = progressOf(seed, meta);
-  const people = peopleOf(seed);
 
   useEffect(() => {
     setFilter("chapitre", chapitre || "");
@@ -69,23 +63,13 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS
           <Button variant="secondary" size="icon" title="Rechercher" onClick={() => setSearchOpen(true)}>
             <Search className="size-4" />
           </Button>
-          <Button
-            size="icon"
-            title="Ajouter une planche"
-            onClick={() => {
-              const id = addPlanche();
-              void navigate({ to: "/planche/$plancheId", params: { plancheId: id } });
-            }}
-          >
-            <Plus className="size-5" />
-          </Button>
         </div>
       }
     >
       <div className="view-enter flex min-h-0 flex-1 flex-col">
         <div className="border-b border-line px-4 py-3 text-center">
           <h2 className="font-display text-2xl">{seed.projet.titre}</h2>
-          <div className="mt-1 text-xs text-muted">{PROJECT_GENRES}</div>
+          {activeProjectId === "original" ? <div className="mt-1 text-xs text-muted">{PROJECT_GENRES}</div> : null}
           {seed.projet.sous_titre ? (
             <p className="mx-auto mt-2 max-w-[320px] font-display text-sm text-cream-2 italic">
               « {seed.projet.sous_titre} »
@@ -133,10 +117,6 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS
             </>
           ) : null}
 
-          {tab === "personnages" ? <PersonnagesPanel /> : null}
-
-          {tab === "notes" ? <NotesPanel /> : null}
-          {tab === "mise-en-page" ? <VisualLayout /> : null}
 
           {tab === "fichiers" ? (
             <div className="space-y-2">
@@ -272,81 +252,6 @@ function PlancheList({
           Aucune planche pour ce filtre.
         </div>
       )}
-    </div>
-  );
-}
-
-function PersonnagesPanel() {
-  const seed = useStudio((s) => s.seed);
-  const entries = [
-    ...(seed.personnages || []).map((x) => ({
-      id: x.id,
-      title: x.nom || x.id,
-      text: [x.role, x.note].filter(Boolean).join(" — "),
-    })),
-    ...(seed.gardiens || []).map((x) => ({
-      id: x.id,
-      title: x.id === "archiviste" ? "Archiviste" : x.id === "armurier" ? "Armurier" : x.id,
-      text: [x.role, x.fonction_protectrice, x.evolution].filter(Boolean).join(" — "),
-    })),
-  ];
-  return (
-    <div className="space-y-3">
-      {entries.map((e) => {
-        const refs = OFFICIAL_REFS.filter((r) => r.entityId === e.id);
-        const main = refs[0];
-        return (
-          <article key={e.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
-            <div className="grid grid-cols-[96px_1fr] gap-3 p-2.5">
-              {main ? (
-                <img src={main.data} alt={main.name} className="h-24 w-24 rounded-lg object-cover" />
-              ) : (
-                <div className="h-24 w-24 rounded-lg bg-cream-2" />
-              )}
-              <div className="min-w-0 py-1">
-                <h4 className="font-display text-[17px]">{e.title}</h4>
-                <p className="mt-1 text-[12px] leading-snug text-paper-muted">{e.text || "Pas encore de note."}</p>
-              </div>
-            </div>
-          </article>
-        );
-      })}
-    </div>
-  );
-}
-
-function NotesPanel() {
-  const seed = useStudio((s) => s.seed);
-  const meta = useStudio((s) => s.meta);
-  const notes = seed.planches.filter((p) => p.instructions_planche || (p.notes_planche || []).length || meta.notes[p.id]);
-  if (!notes.length) {
-    return (
-      <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
-        Aucune note de planche pour l’instant.
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2">
-      {notes.map((p) => (
-        <div key={p.id} className="rounded-xl border border-paper-line bg-paper p-3">
-          <h5 className="mb-1.5 text-xs font-bold tracking-wide text-tab-on uppercase">
-            P{padPage(p.numero)} — {p.titre}
-          </h5>
-          {p.instructions_planche ? (
-            <p className="mb-2 text-[12.5px] leading-relaxed">
-              <b>Dialogue global : </b>
-              {p.instructions_planche}
-            </p>
-          ) : null}
-          {(p.notes_planche || []).map((n) => (
-            <p key={n} className="text-[12.5px] leading-relaxed">
-              {n}
-            </p>
-          ))}
-          {meta.notes[p.id] ? <p className="mt-2 whitespace-pre-wrap text-[12.5px] leading-relaxed"><b>Note de production : </b>{meta.notes[p.id]}</p> : null}
-        </div>
-      ))}
     </div>
   );
 }

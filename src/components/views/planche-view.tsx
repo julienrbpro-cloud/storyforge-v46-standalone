@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { CaseCard } from "@/components/case-card";
 import { CaseInspector } from "@/components/case-inspector";
-import { PaperSheet, TabsBar } from "@/components/paper-sheet";
+import { PaperSheet } from "@/components/paper-sheet";
 import { PageStatusBadge } from "@/components/status-badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -19,18 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { checkPage } from "@/lib/coherence";
 import { useStudio } from "@/lib/store";
 import { printStoryboard } from "@/lib/print";
-import { pickImage } from "@/lib/files";
 import { padPage } from "@/lib/utils";
-import { caseSize } from "@/lib/visual-layout";
+import { computeVisualPages } from "@/lib/visual-layout";
 import { useEffect, useState } from "react";
 import { GUARDIANS } from "@/lib/constants";
-import { toast } from "sonner";
-
-const TABS = [
-  ["storyboard", "Storyboard"],
-  ["notes", "Notes"],
-  ["fichiers", "Fichiers"],
-] as const;
 
 export function PlancheView({ plancheId }: { plancheId: string }) {
   const seed = useStudio((s) => s.seed);
@@ -44,15 +36,15 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
   const setPageField = useStudio((s) => s.setPageField);
   const setPageGuardian = useStudio((s) => s.setPageGuardian);
   const setPageNote = useStudio((s) => s.setPageNote);
-  const replaceImage = useStudio((s) => s.replaceCaseImage);
-  const [tab, setTab] = useState<(typeof TABS)[number][0]>("storyboard");
+  const [pageIndex, setPageIndex] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
   void revision;
   const p = seed.planches.find((x) => x.id === plancheId);
   useEffect(() => {
     setSheetOpen(Boolean(selected && p?.cases.some((c) => c.id === selected)));
-  }, [plancheId, selected]);
+  }, [plancheId, selected, p?.cases]);
+  useEffect(() => { setPageIndex(0); }, [plancheId]);
   if (!p) {
     return (
       <AppShell title={<div className="font-display text-lg">Planche introuvable</div>}>
@@ -62,15 +54,13 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
   }
   const panel = p.cases.find((c) => c.id === selected) || p.cases[0] || null;
   const issues = checkPage(seed, p).filter((x) => x.level === "error");
+  const visualPages = computeVisualPages({ ...seed, planches: [p] });
+  const currentIndex = Math.min(pageIndex, Math.max(0, visualPages.length - 1));
+  const visualPage = visualPages[currentIndex];
 
   function openCase(cid: string) {
     setSelected(cid);
     setSheetOpen(true);
-  }
-
-  async function addImage(cid: string) {
-    const file = await pickImage();
-    if (file) await replaceImage(cid, file).catch((error: Error) => toast.error(error.message));
   }
 
   return (
@@ -128,62 +118,33 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
     >
       <div className="view-enter flex min-h-0 flex-1 flex-col">
         <PaperSheet>
-          <TabsBar tabs={TABS} value={tab} onChange={(id) => setTab(id as (typeof TABS)[number][0])} />
-
-          {tab === "storyboard" ? (
-            <>
-              {issues.length ? (
-                <div className="mb-3 rounded-xl border border-dashed border-accent/40 bg-chip px-3 py-2 text-[11.5px] leading-snug text-chip-fg">
-                  {issues.length} alerte{issues.length > 1 ? "s" : ""} de cohérence — voir les notes.
-                </div>
-              ) : null}
-              <div className="mx-auto grid w-full max-w-[900px] grid-cols-3 auto-rows-[300px] gap-3">
-                {p.cases.map((c) => {
-                  const size = caseSize(c);
-                  return (
-                    <div
-                      key={c.id}
-                      className="min-h-0 min-w-0"
-                      style={{
-                        gridColumn: `span ${size.width} / span ${size.width}`,
-                        gridRow: `span ${size.height} / span ${size.height}`,
-                      }}
-                    >
-                      <CaseCard
-                        panel={c}
-                        selected={selected === c.id}
-                        onSelect={() => openCase(c.id)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <button
-                type="button"
-                className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-subtle/60 text-[13px] font-semibold text-tab"
-                onClick={() => addCase(p.id)}
-              >
-                <Plus className="size-4" />
-                Ajouter une case
-              </button>
-              <div className="mt-4 rounded-xl border border-line bg-panel p-3.5 text-cream">
-                <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
-                  <FileText className="size-4 text-accent" />
-                  Dialogue global
-                  <span className="font-normal text-muted">(optionnel)</span>
-                </div>
-                <textarea
-                  className="min-h-16 w-full rounded-lg border border-line bg-ink p-2.5 text-[12.5px] leading-relaxed text-cream-2 outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/50"
-                  placeholder="Une planche, un fil. Ce que l’on laisse derrière soi."
-                  value={p.instructions_planche || ""}
-                  onChange={(e) => setPageField(p.id, "instructions_planche", e.target.value)}
-                />
-              </div>
-            </>
+          {issues.length ? <div className="mb-3 rounded-xl border border-dashed border-accent/40 bg-chip px-3 py-2 text-[11.5px] text-chip-fg">{issues.length} alerte{issues.length > 1 ? "s" : ""} de cohérence — voir les détails de la planche.</div> : null}
+          {visualPages.length > 1 ? (
+            <div className="mb-3 flex items-center justify-between gap-2 text-sm">
+              <Button variant="paper" size="sm" disabled={currentIndex === 0} onClick={() => setPageIndex(currentIndex - 1)}>←</Button>
+              <span>Grille {currentIndex + 1} / {visualPages.length}</span>
+              <Button variant="paper" size="sm" disabled={currentIndex === visualPages.length - 1} onClick={() => setPageIndex(currentIndex + 1)}>→</Button>
+            </div>
           ) : null}
-
-          {tab === "notes" ? (
-            <div className="space-y-3">
+          {visualPage ? (
+            <div className="visual-grid w-full max-w-[900px] self-center">
+              {visualPage.items.map(({ c, row, col, width, height }) => (
+                <div key={c.id} className="min-h-0 min-w-0" style={{ gridColumn: `${col + 1} / span ${width}`, gridRow: `${row + 1} / span ${height}` }}>
+                  <CaseCard panel={c} compact selected={selected === c.id && sheetOpen} onSelect={() => openCase(c.id)} />
+                </div>
+              ))}
+            </div>
+          ) : <p className="py-8 text-center text-sm text-paper-muted">Aucune case sur cette planche.</p>}
+          <button type="button" className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-subtle/60 text-[13px] font-semibold text-tab" onClick={() => { addCase(p.id); setPageIndex(visualPages.length ? visualPages.length - 1 : 0); }}>
+            <Plus className="size-4" /> Ajouter une case
+          </button>
+          <div className="mt-4 rounded-xl border border-line bg-panel p-3.5 text-cream">
+            <div className="mb-2 flex items-center gap-2 text-sm font-semibold"><FileText className="size-4 text-accent" />Dialogue global <span className="font-normal text-muted">(optionnel)</span></div>
+            <textarea className="min-h-16 w-full rounded-lg border border-line bg-ink p-2.5 text-[12.5px] leading-relaxed text-cream-2 outline-none placeholder:text-subtle focus-visible:ring-2 focus-visible:ring-accent/50" placeholder="Dialogue global de la planche" value={p.instructions_planche || ""} onChange={(e) => setPageField(p.id, "instructions_planche", e.target.value)} />
+          </div>
+          <details className="mt-3 rounded-xl border border-paper-line bg-paper p-3">
+            <summary className="min-h-9 cursor-pointer font-semibold">Détails de la planche et gardiens</summary>
+            <div className="mt-3 space-y-3">
               <Field label="Titre">
                 <Input value={p.titre || ""} onChange={(e) => setPageField(p.id, "titre", e.target.value)} />
               </Field>
@@ -216,7 +177,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
               <div className="grid grid-cols-2 gap-2">
                 {GUARDIANS.map(([gid, label]) => {
                   const guardian = p.gardien_etat[gid];
-                  return <Field key={gid} label={label}>
+                  return <Field key={gid} label={seed.gardiens.find((g) => g.id === gid)?.nom || label}>
                     <select className="h-11 w-full rounded-md border border-paper-line bg-paper px-2"
                       value={guardian.present ? String(guardian.niveau ?? 0) : "absent"}
                       onChange={(event) => {
@@ -245,47 +206,20 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
                 </div>
               )}
             </div>
-          ) : null}
-
-          {tab === "fichiers" ? (
-            <div className="space-y-2">
-              {p.cases.length ? (
-                p.cases.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex items-center gap-2.5 rounded-xl border border-paper-line bg-paper px-3 py-2 text-xs"
-                  >
-                    <span className="flex-1 font-semibold">
-                      Case {c.numero}
-                      {c.titre ? ` — ${c.titre}` : ""}
-                    </span>
-                    <span className="max-w-[36%] truncate text-[10.5px] text-subtle">
-                      {c.image ? "image jointe" : "aucune image"}
-                    </span>
-                    <button
-                      type="button"
-                      className="rounded-full border border-paper-line bg-cream px-3 py-1.5 font-bold"
-                      onClick={() => void addImage(c.id)}
-                    >
-                      {c.image ? "Remplacer" : "Ajouter"}
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
-                  Ajoute une case pour y joindre des images.
-                </div>
-              )}
-            </div>
-          ) : null}
+          </details>
         </PaperSheet>
       </div>
 
-      {tab === "storyboard" && panel ? (
+      {panel ? (
         <Dialog
           open={sheetOpen}
           onOpenChange={(open) => {
             setSheetOpen(open);
+            if (!open && selected) {
+              const index = visualPages.findIndex((page) => page.items.some(({ c }) => c.id === selected));
+              if (index >= 0) setPageIndex(index);
+              setSelected(null);
+            }
           }}
         >
           <DialogContent title={`Case ${panel.numero}`}>
@@ -297,6 +231,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
                 if (!confirm("Supprimer cette case ?")) return;
                 deleteCase(p.id, panel.id);
                 setSheetOpen(false);
+                setSelected(null);
               }}
             >
               Supprimer la case

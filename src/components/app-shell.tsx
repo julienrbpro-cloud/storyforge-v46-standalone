@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { BookOpen, FolderOpen, Home, Plus, Search, UserRound } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Field, Input } from "@/components/ui/input";
 import { SearchDialog } from "@/components/search-dialog";
 import { cn } from "@/lib/utils";
 import { useStudio } from "@/lib/store";
@@ -36,7 +38,9 @@ export function AppShell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const saveState = useStudio((s) => s.saveState);
   const setSearchOpen = useStudio((s) => s.setSearchOpen);
-  const addPlanche = useStudio((s) => s.addPlanche);
+  const addProject = useStudio((s) => s.addProject);
+  const [projectOpen, setProjectOpen] = useState(false);
+  const [projectTitle, setProjectTitle] = useState("");
   const navigate = useNavigate();
 
   return (
@@ -61,11 +65,9 @@ export function AppShell({
           {showPlus ? (
             <Button
               size="icon"
-              title="Ajouter une planche"
-              onClick={() => {
-                const id = addPlanche();
-                void navigate({ to: "/planche/$plancheId", params: { plancheId: id } });
-              }}
+              title="Nouveau projet"
+              aria-label="Nouveau projet"
+              onClick={() => setProjectOpen(true)}
             >
               <Plus className="size-5" />
             </Button>
@@ -103,6 +105,20 @@ export function AppShell({
         </nav>
       )}
       <SearchDialog />
+      <Dialog open={projectOpen} onOpenChange={setProjectOpen}>
+        <DialogContent title="Nouveau projet">
+          <form onSubmit={(event) => {
+            event.preventDefault();
+            if (!addProject(projectTitle)) return;
+            setProjectTitle("");
+            setProjectOpen(false);
+            void navigate({ to: "/projet" });
+          }} className="space-y-3">
+            <Field label="Nom du projet"><Input autoFocus required value={projectTitle} onChange={(event) => setProjectTitle(event.target.value)} /></Field>
+            <Button type="submit" className="w-full">Créer le projet</Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
