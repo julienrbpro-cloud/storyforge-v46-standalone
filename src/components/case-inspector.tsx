@@ -5,8 +5,9 @@ import { Field, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { GUARDIANS, TEXT_TYPES } from "@/lib/constants";
 import { peopleOf } from "@/lib/seed";
+import { caseLabel, storyCases } from "@/lib/sequence";
 import { useStudio } from "@/lib/store";
-import { caseSize } from "@/lib/visual-layout";
+import { caseSize, visualPageIndexOf } from "@/lib/visual-layout";
 import { buildPrompt } from "@/lib/prompt";
 import { toast } from "sonner";
 import type { Overlay, PanelCase, Planche } from "@/lib/types";
@@ -36,9 +37,11 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
   const replaceImage = useStudio((s) => s.replaceCaseImage);
   const removeImage = useStudio((s) => s.removeCaseImage);
   const [promptOpen, setPromptOpen] = useState(false);
-  const promptText = buildPrompt(seed, page, panel);
+  const ordered = storyCases(seed);
+  const promptText = buildPrompt(seed, panel);
   const size = caseSize(panel);
   const people = peopleOf(seed);
+  const origin = panel.planche_id ? seed.planches.find((item) => item.id === panel.planche_id) : undefined;
 
   async function chooseImage() {
     try {
@@ -75,6 +78,11 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
           </Button>
         ) : null}
       </div>
+      <StoryOrder page={page} panel={panel} />
+      <p className="text-[12.5px] text-paper-muted">
+        Planche visuelle {Math.max(1, visualPageIndexOf(ordered, panel.id) + 1)}
+        {origin ? ` · provenance ${origin.titre || "sans titre"} · repère ${panel.numero}` : " · sans planche d’origine"}
+      </p>
       <Field label="Titre">
         <Input
           value={panel.titre || ""}
@@ -201,15 +209,15 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
             {GUARDIANS.map(([gid, label]) => {
               const o = panel.gardien_override?.[gid];
               const value = o == null ? "inherit" : o.present === false ? "absent" : String(o.niveau);
+              const name = seed.gardiens.find((g) => g.id === gid)?.nom || label;
               return (
-                <label key={gid} className="text-[11px] font-extrabold text-paper-muted">
-                  {seed.gardiens.find((g) => g.id === gid)?.nom || label}
+                <Field key={gid} label={name}>
                   <select
-                    className="mt-1 h-11 w-full rounded-md border border-paper-line bg-paper font-normal text-paper-ink"
+                    className="h-11 w-full rounded-md border border-paper-line bg-paper px-2 font-normal text-paper-ink"
                     value={value}
                     onChange={(e) => setGuardian(page.id, panel.id, gid, e.target.value)}
                   >
-                    <option value="inherit">Hérite de la planche</option>
+                    <option value="inherit">Non déclaré</option>
                     <option value="absent">Absent</option>
                     {[0, 1, 2, 3, 4, 5].map((n) => (
                       <option key={n} value={String(n)}>
@@ -217,7 +225,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
                       </option>
                     ))}
                   </select>
-                </label>
+                </Field>
               );
             })}
           </div>
@@ -232,7 +240,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
                   value={size[key]}
                   onChange={(e) => setSize(page.id, panel.id, key, Number(e.target.value))}
                 >
-                  {[1, 2, 3].map((n) => (
+                  {(key === "height" ? [1, 2, 3, 4] : [1, 2, 3]).map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>
@@ -375,7 +383,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
         </div>
       </details>
       <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
-        <DialogContent title={`Prompt · P${page.numero} case ${panel.numero}`}>
+        <DialogContent title={`Prompt · Case ${caseLabel(panel, ordered)}`}>
           <textarea
             readOnly
             spellCheck={false}
@@ -393,5 +401,96 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+function StoryOrder({ page, panel }: { page: Planche; panel: PanelCase }) {
+  const seed = useStudio((s) => s.seed);
+  const revision = useStudio((s) => s.revision);
+  const moveCase = useStudio((s) => s.moveCase);
+  const moveCaseStep = useStudio((s) => s.moveCaseStep);
+  const moveCaseTo = useStudio((s) => s.moveCaseTo);
+  void revision;
+  const cases = storyCases(seed);
+  const others = cases.filter((item) => item.id !== panel.id);
+  const [place, setPlace] = useState<"before" | "after">("before");
+  const [anchor, setAnchor] = useState(others[0]?.id ?? "");
+  const anchorId = others.some((item) => item.id === anchor) ? anchor : others[0]?.id ?? "";
+  const label = caseLabel(panel, cases);
+
+  if (cases.length < 2) return null;
+
+  return (
+    <form
+      className="space-y-2 rounded-xl border border-paper-line bg-paper p-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!anchorId) return;
+        moveCase(panel.id, anchorId, place);
+      }}
+    >
+      <div className="text-xs font-bold tracking-wide text-accent uppercase">Ordre du récit</div>
+      <p className="text-[12.5px] text-paper-muted">
+        Case {label} sur {cases.length}
+        {panel.numero && panel.numero !== label ? ` · repère d’origine ${panel.numero}` : ""}
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        <Button type="button" variant="paper" className="rounded-md" disabled={(panel.ordre ?? 1) <= 1} onClick={() => moveCaseTo(panel.id, 0)}>
+          Premier
+        </Button>
+        <Button
+          type="button"
+          variant="paper"
+          className="rounded-md"
+          disabled={(panel.ordre ?? 1) >= cases.length}
+          onClick={() => moveCaseTo(panel.id, cases.length - 1)}
+        >
+          Dernier
+        </Button>
+        <Button type="button" variant="paper" className="rounded-md" disabled={(panel.ordre ?? 1) <= 1} onClick={() => moveCaseStep(panel.id, -1)}>
+          Monter
+        </Button>
+        <Button
+          type="button"
+          variant="paper"
+          className="rounded-md"
+          disabled={(panel.ordre ?? 1) >= cases.length}
+          onClick={() => moveCaseStep(panel.id, 1)}
+        >
+          Descendre
+        </Button>
+      </div>
+      <label className="block text-[11px] font-extrabold text-paper-muted">
+        Placer
+        <select
+          aria-label="Placer avant ou après"
+          className="mt-1 h-11 w-full rounded-md border border-paper-line bg-paper font-normal text-paper-ink"
+          value={place}
+          onChange={(event) => setPlace(event.target.value as "before" | "after")}
+        >
+          <option value="before">Avant</option>
+          <option value="after">Après</option>
+        </select>
+      </label>
+      <label className="block text-[11px] font-extrabold text-paper-muted">
+        Cette case
+        <select
+          aria-label="Case de référence"
+          className="mt-1 h-11 w-full rounded-md border border-paper-line bg-paper font-normal text-paper-ink"
+          value={anchorId}
+          onChange={(event) => setAnchor(event.target.value)}
+        >
+          {others.map((item) => (
+            <option key={item.id} value={item.id}>
+              Case {caseLabel(item, cases)}
+              {item.titre ? ` — ${item.titre}` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button type="submit" className="w-full rounded-md">
+        Déplacer
+      </Button>
+    </form>
   );
 }

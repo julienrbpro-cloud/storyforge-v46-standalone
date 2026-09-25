@@ -3,6 +3,7 @@ import { activeProjectMedia, blobToDataUrl, dataUrlToBlob, dbAll, type MediaReco
 import { clone, normalizeMeta, parseSeed } from "./seed";
 import { APP_VERSION } from "./constants";
 import type { Meta, Seed } from "./types";
+import { storyCases } from "./sequence";
 
 const sessionSchema = z.object({
   seed: z.unknown().refine((x) => x != null, "Seed manquant"),
@@ -61,8 +62,7 @@ export function parseSession(data: unknown) {
     records.set(record.id, { ...record, blob: dataUrlToBlob(encoded) });
   }
   // Legacy standalone backups stored images by case id.
-  for (const p of seed.planches)
-    for (const c of p.cases) {
+  for (const c of storyCases(seed)) {
       const legacy = d.images?.[c.id];
       if (legacy) {
         const id = `legacy-${c.id}`;

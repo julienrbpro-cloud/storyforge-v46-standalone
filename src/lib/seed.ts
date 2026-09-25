@@ -1,5 +1,6 @@
 import officialJson from "@/data/seed.json";
 import { uid, clamp } from "./utils";
+import { migrateSequence, storyCases } from "./sequence";
 import type { Overlay, PanelCase, Planche, Seed, Meta } from "./types";
 import { z } from "zod";
 
@@ -81,6 +82,35 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       });
     });
   });
+  if (Array.isArray(SEED.cases)) {
+    SEED.cases.forEach((c) => {
+      c.id ||= uid("case");
+      c.numero ??= "";
+      c.description ||= "";
+      c.image = publicAsset(c.image ?? null);
+      c.overlays = Array.isArray(c.overlays) ? c.overlays : [];
+      c.textes ||= [];
+      c.personnages ||= [];
+      c.statut ||= "a_valider";
+      if (Array.isArray(c.notes)) c.notes = (c.notes as unknown as string[]).join("\n");
+      c.notes = c.notes ? String(c.notes) : null;
+      c.textes.forEach((t, ti) => {
+        t.id ||= `${c.id}-T${String(ti + 1).padStart(2, "0")}`;
+        t.preserve_exact = !!t.preserve_exact;
+      });
+      c.overlays.forEach((o: Overlay, oi: number) => {
+        o.id ||= `${c.id}-OV${String(oi + 1).padStart(2, "0")}`;
+        o.type ||= "text";
+        o.x = clamp(Number(o.x ?? 0.1), 0, 1);
+        o.y = clamp(Number(o.y ?? 0.1), 0, 1);
+        o.width = clamp(Number(o.width ?? 0.32), 0.08, 1);
+        o.height = clamp(Number(o.height ?? 0.18), 0.06, 1);
+        o.font_size = clamp(Number(o.font_size ?? 0.045), 0.02, 0.12);
+        o.align ||= "center";
+      });
+    });
+  }
+  migrateSequence(SEED);
   SEED.projet.nombre_planches = SEED.planches.length;
   return SEED;
 }
@@ -178,6 +208,65 @@ const seedSchema = z
         })
         .passthrough(),
     ),
+    cases: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            numero: z.string().optional(),
+            titre: z.string().nullable().optional(),
+            description: z.string().nullable().optional(),
+            image: z.string().nullable().optional(),
+            statut: z.string().optional(),
+            planche_id: z.string().optional(),
+            layout_size: z
+              .object({
+                width: z.number().int().min(1).max(3),
+                height: z.number().int().min(1).max(4),
+              })
+              .optional(),
+            personnages: z.array(z.string()).optional(),
+            textes: z
+              .array(
+                z
+                  .object({
+                    id: z.string().optional(),
+                    type: z.string(),
+                    contenu: z.string(),
+                    personnage_id: z.string().nullable().optional(),
+                    preserve_exact: z.boolean().optional(),
+                  })
+                  .passthrough(),
+              )
+              .optional(),
+            gardien_override: z
+              .object({
+                archiviste: guardianSchema.optional(),
+                armurier: guardianSchema.optional(),
+              })
+              .optional(),
+            overlays: z
+              .array(
+                z
+                  .object({
+                    id: z.string().optional(),
+                    type: z.enum(["text", "speech"]).optional(),
+                    text_ref: z.string().nullable().optional(),
+                    content: z.string().optional(),
+                    x: z.number().optional(),
+                    y: z.number().optional(),
+                    width: z.number().optional(),
+                    height: z.number().optional(),
+                    font_size: z.number().optional(),
+                    align: z.enum(["left", "center", "right"]).optional(),
+                  })
+                  .passthrough(),
+              )
+              .optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -190,7 +279,11 @@ export function parseSeed(data: unknown): Seed {
   const seed = normalizeSeed(result.data as unknown as Seed);
   const ids = new Set<string>();
   for (const p of seed.planches) {
-    for (const item of [p, ...p.cases, ...p.cases.flatMap((c) => [...c.textes, ...c.overlays])]) {
+    if (ids.has(p.id)) throw new Error(`Identifiant dupliqué : ${p.id}`);
+    ids.add(p.id);
+  }
+  for (const c of seed.cases || []) {
+    for (const item of [c, ...c.textes, ...c.overlays]) {
       if (ids.has(item.id)) throw new Error(`Identifiant dupliqué : ${item.id}`);
       ids.add(item.id);
     }
@@ -219,15 +312,22 @@ export function pageById(seed: Seed, id: string) {
 }
 
 export function caseById(seed: Seed, pid: string, cid: string) {
-  return pageById(seed, pid)?.cases.find((c) => c.id === cid);
+  return (
+    storyCases(seed).find((c) => c.id === cid && (!pid || !c.planche_id || c.planche_id === pid)) ||
+    pageById(seed, pid)?.cases.find((c) => c.id === cid)
+  );
 }
 
 export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase } | null {
-  for (const p of seed.planches) {
-    const c = p.cases.find((x) => x.id === cid);
-    if (c) return { p, c };
-  }
-  return null;
+  const c =
+    storyCases(seed).find((x) => x.id === cid) ||
+    seed.planches.flatMap((p) => p.cases || []).find((x) => x.id === cid);
+  if (!c) return null;
+  const p =
+    seed.planches.find((page) => page.id === c.planche_id) ||
+    seed.planches.find((page) => (page.cases || []).some((x) => x.id === cid));
+  if (!p) return null;
+  return { p, c };
 }
 
 export function emptyFilters() {
@@ -239,17 +339,15 @@ export function emptyMeta(): Meta {
 }
 
 export function totalCases(seed: Seed) {
-  return seed.planches.reduce((n, p) => n + p.cases.length, 0);
+  return storyCases(seed).length;
 }
 
 export function caseImageCount(seed: Seed) {
-  return seed.planches.flatMap((p) => p.cases).filter((c) => c.image).length;
+  return storyCases(seed).filter((c) => c.image).length;
 }
 
 export function idbImageCount(seed: Seed) {
-  return seed.planches
-    .flatMap((p) => p.cases)
-    .filter((c) => String(c.image || "").startsWith("idb://")).length;
+  return storyCases(seed).filter((c) => String(c.image || "").startsWith("idb://")).length;
 }
 
 export function peopleOf(seed: Seed) {

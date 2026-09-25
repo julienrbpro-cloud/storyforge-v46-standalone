@@ -1,7 +1,10 @@
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Mark } from "@/components/logo";
 import { caseImageCount, idbImageCount, totalCases } from "@/lib/seed";
+import { computeVisualPages } from "@/lib/visual-layout";
 import { useStudio } from "@/lib/store";
 import { downloadJson, exportProjectZip } from "@/lib/export-zip";
 import { printStoryboard } from "@/lib/print";
@@ -29,7 +32,14 @@ export function DataView() {
   }
 
   return (
-    <AppShell title={<div className="font-display text-lg">Profil</div>}>
+    <AppShell
+      back={
+        <Link to="/projet" aria-label="Retour au projet" className="grid size-10 place-items-center text-cream">
+          <ArrowLeft className="size-5" />
+        </Link>
+      }
+      title={<div className="font-display text-lg">Exporter</div>}
+    >
       <div className="view-enter space-y-3 p-4">
         <div className="flex items-center gap-3 rounded-2xl border border-line bg-panel p-4">
           <Mark className="size-14 text-accent" />
@@ -45,7 +55,8 @@ export function DataView() {
           <h5 className="mb-1 text-xs font-bold tracking-wide text-accent-2 uppercase">Manuscrit</h5>
           <p className="font-display text-lg">{seed.projet.titre}</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-cream-2">
-            {seed.planches.length} planches · {totalCases(seed)} cases · {caseImageCount(seed)} image
+            {computeVisualPages(seed).length} planches visuelles · {seed.planches.length} planches manuscrites ·{" "}
+            {totalCases(seed)} cases · {caseImageCount(seed)} image
             {caseImageCount(seed) > 1 ? "s" : ""}
             {idbImageCount(seed) ? ` dont ${idbImageCount(seed)} dans ce navigateur` : ""}.
           </p>

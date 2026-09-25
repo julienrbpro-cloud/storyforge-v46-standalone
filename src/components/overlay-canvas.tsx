@@ -1,6 +1,7 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { CaseImage } from "@/components/case-image";
 import { clamp, cn } from "@/lib/utils";
+import { caseLabel } from "@/lib/sequence";
 import { useStudio } from "@/lib/store";
 import type { Overlay, PanelCase, Planche } from "@/lib/types";
 
@@ -88,12 +89,12 @@ export function OverlayCanvas({
       {panel.image ? (
         <CaseImage
           src={panel.image}
-          alt={`Case ${panel.numero}`}
+          alt={`Case ${caseLabel(panel)}`}
           className={cn("absolute inset-0 h-full w-full", imageFit === "contain" ? "object-contain" : "object-cover")}
         />
       ) : (
         <span className="pointer-events-none absolute inset-0 grid place-items-center font-display text-4xl text-[#c9bba0]">
-          {panel.numero}
+          {caseLabel(panel)}
         </span>
       )}
       {(panel.overlays || []).map((o) => (

@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { useStudio } from "@/lib/store";
+import { computeVisualPages } from "@/lib/visual-layout";
 
 export function StudioProvider({ children }: { children: ReactNode }) {
   const ready = useStudio((s) => s.ready);
   const boot = useStudio((s) => s.boot);
-  const seed = useStudio((s) => s.seed);
-  const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useLayoutEffect(() => {
@@ -38,16 +37,17 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (e.key !== "j" && e.key !== "k") return;
-      if (!pathname.startsWith("/planche/")) return;
-      const id = pathname.split("/planche/")[1];
-      const i = seed.planches.findIndex((p) => p.id === id);
-      if (i < 0) return;
-      const next = e.key === "j" ? seed.planches[i + 1] : seed.planches[i - 1];
-      if (next) void navigate({ to: "/planche/$plancheId", params: { plancheId: next.id } });
+      if (pathname !== "/projet") return;
+      const pages = computeVisualPages(useStudio.getState().seed);
+      if (!pages.length) return;
+      const index = useStudio.getState().visualPageIndex;
+      const next = e.key === "j" ? index + 1 : index - 1;
+      if (next < 0 || next >= pages.length) return;
+      useStudio.getState().setVisualPageIndex(next);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, pathname, seed.planches]);
+  }, [pathname]);
 
   if (!ready && pathname !== "/") {
     return (

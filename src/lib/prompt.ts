@@ -1,7 +1,9 @@
 import { GUARDIANS } from "./constants";
 import { SEED_OFFICIEL, typeInfo } from "./seed";
-import { choiceFor, effectiveGuardian } from "./coherence";
-import type { PanelCase, Planche, Seed } from "./types";
+import { choiceFor } from "./coherence";
+import { caseLabel, storyCases } from "./sequence";
+import type { GuardianId, PanelCase, Seed } from "./types";
+import { visualPageIndexOf } from "./visual-layout";
 
 export function relevantRules(seed: Seed, c: PanelCase) {
   if (seed._meta?.statut_canonique === "local") return seed.regles_editoriales || [];
@@ -22,12 +24,21 @@ export function relevantRules(seed: Seed, c: PanelCase) {
   );
 }
 
-export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
-  const choice = choiceFor(seed, p, c);
-  const states = GUARDIANS.map(([gid, label]) => {
-    const s = effectiveGuardian(p, c, gid);
-    return `${label}: ${s.present ? "présent, niveau " + s.niveau : "absent"}`;
-  }).join("\n");
+function declaredGuardian(c: PanelCase, gid: GuardianId) {
+  const state = c.gardien_override?.[gid];
+  if (!state) return "non déclaré sur la case";
+  return state.present ? "présent, niveau " + state.niveau : "absent";
+}
+
+/** Visible number and visual page come from `seed.cases`. Provenance stays metadata. */
+export function buildPrompt(seed: Seed, c: PanelCase) {
+  const ordered = storyCases(seed);
+  const visible = caseLabel(c, ordered);
+  const visualPage = visualPageIndexOf(ordered, c.id) + 1;
+  const canonical = SEED_OFFICIEL.planches.find((page) => page.cases.some((panel) => panel.id === c.id));
+  const choice = canonical ? choiceFor(seed, canonical, c) : undefined;
+  const origin = c.planche_id ? seed.planches.find((page) => page.id === c.planche_id) : undefined;
+  const states = GUARDIANS.map(([gid, label]) => `${label}: ${declaredGuardian(c, gid)}`).join("\n");
   const texts =
     (c.textes || [])
       .map(
@@ -42,10 +53,16 @@ export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
   const rules = relevantRules(seed, c)
     .map((r) => `### ${r.titre}\n${r.contenu}`)
     .join("\n\n");
+  const provenance = origin
+    ? `Planche manuscrite ${origin.numero} — ${origin.titre}. Repère d’origine ${c.numero}. Cette provenance ne numérote pas la case.`
+    : "Aucune planche d’origine.";
   return `CRÉATION D’UNE CASE DE BANDE DESSINÉE — ${seed.projet.titre} ${seed.projet.version}
 
-Planche ${p.numero} — ${p.titre}
-Case ${c.numero}${c.titre ? " — " + c.titre : ""}
+Planche visuelle ${visualPage}
+Case ${visible}${c.titre ? " — " + c.titre : ""}
+
+PROVENANCE CANONIQUE
+${provenance}
 
 MISE EN IMAGE
 ${c.description || "[Description volontairement absente]"}
@@ -53,7 +70,7 @@ ${c.description || "[Description volontairement absente]"}
 PERSONNAGES ET RÉFÉRENCES
 ${refs}
 
-ÉTAT EFFECTIF DES GARDIENS
+ÉTAT DE LA CASE
 ${states}
 
 TEXTES À INTÉGRER

@@ -1,10 +1,11 @@
 import { GUARDIANS, TEXT_TYPES } from "./constants";
 import { SEED_OFFICIEL } from "./seed";
 import type { CoherenceIssue, GuardianId, PanelCase, Planche, Seed } from "./types";
+import { casesForPlanche } from "./sequence";
 
-export function effectiveGuardian(p: Planche, c: PanelCase, gid: GuardianId) {
-  const o = c.gardien_override?.[gid];
-  return o == null ? p.gardien_etat?.[gid] || { present: false, niveau: null } : o;
+/** Current guardians live on the case. The planche argument is provenance only. */
+export function effectiveGuardian(_planche: Planche, panel: PanelCase, gid: GuardianId) {
+  return panel.gardien_override?.[gid] || { present: false, niveau: null };
 }
 
 export function choiceFor(seed: Seed, p: Planche, c: PanelCase) {
@@ -22,10 +23,11 @@ export function choiceFor(seed: Seed, p: Planche, c: PanelCase) {
 
 export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
   const out: CoherenceIssue[] = [];
+  const cases = casesForPlanche(seed, p.id);
   const canonical = SEED_OFFICIEL.planches.find((x) => x.id === p.id);
   for (const [gid, label] of GUARDIANS) {
     const s = p.gardien_etat?.[gid];
-    const appear = (p.cases || []).some((c) => (c.personnages || []).includes(gid));
+    const appear = cases.some((c) => (c.personnages || []).includes(gid));
     if (!s) out.push({ level: "error", title: `${label} : état manquant`, text: "Présence et niveau doivent être déclarés." });
     else if (s.present && (!Number.isInteger(s.niveau) || (s.niveau ?? -1) < 0 || (s.niveau ?? 9) > 5))
       out.push({ level: "error", title: `${label} : niveau invalide`, text: "Choisir un niveau de 0 à 5." });
@@ -33,7 +35,7 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
       out.push({ level: "error", title: `${label} absent avec niveau`, text: "Un gardien absent doit avoir un niveau nul." });
     if (s?.present && !appear)
       out.push({ level: "warn", title: `${label} déclaré présent`, text: "Aucune case de la planche ne contient ce gardien." });
-    if (!s?.present && (p.cases || []).some((c) => c.personnages.includes(gid) && !effectiveGuardian(p, c, gid).present))
+    if (!s?.present && cases.some((c) => c.personnages.includes(gid) && !effectiveGuardian(p, c, gid).present))
       out.push({ level: "error", title: `${label} déclaré absent`, text: "Au moins une case contient pourtant ce gardien." });
     const cs = canonical?.gardien_etat?.[gid];
     if (cs && JSON.stringify(cs) !== JSON.stringify(s))
@@ -42,7 +44,7 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
         title: `${label} modifié par rapport au seed`,
         text: `Canonique : ${cs.present ? "présent niveau " + cs.niveau : "absent"}.`,
       });
-    for (const c of p.cases || []) {
+    for (const c of cases) {
       const e = effectiveGuardian(p, c, gid);
       if (e.present && (!Number.isInteger(e.niveau) || (e.niveau ?? -1) < 0 || (e.niveau ?? 9) > 5))
         out.push({ level: "error", title: `Case ${c.numero} : ${label} niveau invalide`, text: "Choisir un niveau de 0 à 5." });
@@ -54,7 +56,7 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
         });
     }
   }
-  for (const c of p.cases || []) {
+  for (const c of cases) {
     const choice = choiceFor(seed, p, c);
     if (choice?.bloque_generation_du_texte)
       out.push({ level: "warn", title: `Case ${c.numero} : verbatim absent`, text: choice.regle });
@@ -100,13 +102,13 @@ export function checkPage(seed: Seed, p: Planche): CoherenceIssue[] {
       text: "La référence canonique ramène les deux gardiens au niveau 1.",
     });
   if (p.id === "P21") {
-    const letter = (p.cases || [])
+    const letter = cases
       .flatMap((c) => c.textes || [])
       .find((t) => (t.contenu || "").includes("Je ne me reconnais plus dans ce miroir."));
     if (letter && letter.type !== "lettre")
       out.push({ level: "error", title: "P21 : type de la lettre", text: "Le texte exact doit rester de type lettre." });
   }
-  if (p.id === "P29" && (p.cases || []).length !== 1)
+  if (p.id === "P29" && cases.length !== 1)
     out.push({
       level: "error",
       title: "P29 : composition unique",

@@ -13,6 +13,8 @@ import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIE
 import { dbAll, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
+import { moveCaseBy, moveCaseRelative, moveCaseToIndex, storyCases, syncStoryOrder } from "./sequence";
+import { visualPageIndexOf } from "./visual-layout";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
 import type {
   Filters,
@@ -78,6 +80,9 @@ interface StudioState {
   setOverlayTextRef: (pid: string, cid: string, oid: string, ref: string) => void;
   removeOverlay: (pid: string, cid: string, oid: string) => void;
   addCase: (pid: string) => void;
+  moveCase: (caseId: string, anchorId: string, place: "before" | "after") => void;
+  moveCaseStep: (caseId: string, dir: -1 | 1) => void;
+  moveCaseTo: (caseId: string, index: number) => void;
   addPlanche: () => string;
   addProject: (title: string) => boolean;
   openProject: (id: string) => void;
@@ -98,8 +103,8 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 function pageOf(seed: Seed, pid: string) {
   return seed.planches.find((p) => p.id === pid);
 }
-function caseOf(seed: Seed, pid: string, cid: string) {
-  return pageOf(seed, pid)?.cases.find((c) => c.id === cid);
+function caseOf(seed: Seed, _pid: string, cid: string) {
+  return storyCases(seed).find((c) => c.id === cid);
 }
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -186,7 +191,7 @@ export const useStudio = create<StudioState>((set, get) => {
       if (!meta.statuts || Object.keys(meta.statuts).length === 0) {
         meta.statuts = {};
         for (const p of seed.planches) {
-          meta.statuts[p.id] = inferPageStatus(p);
+          meta.statuts[p.id] = inferPageStatus(p, seed);
         }
       }
       const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
@@ -317,7 +322,7 @@ export const useStudio = create<StudioState>((set, get) => {
       };
       c.layout_size = {
         width: Math.min(3, Math.max(1, next.width)),
-        height: Math.min(3, Math.max(1, next.height)),
+        height: Math.min(4, Math.max(1, next.height)),
       };
       bump();
     },
@@ -463,15 +468,14 @@ export const useStudio = create<StudioState>((set, get) => {
     },
 
     addCase(pid) {
-      const p = pageOf(get().seed, pid);
-      if (!p) return;
-      const n = p.cases.length + 1;
-      const id = uid(p.id + "-case");
-      p.cases.push({
+      const seed = get().seed;
+      seed.cases ||= [];
+      const id = uid("case");
+      const created = {
         id,
         image: null,
         overlays: [],
-        numero: String(n),
+        numero: "",
         titre: null,
         type_unite: "case",
         source_label: "Case locale",
@@ -480,9 +484,14 @@ export const useStudio = create<StudioState>((set, get) => {
         personnages: [],
         notes: null,
         source_verbatim: null,
-        statut: "a_valider",
-      });
-      set({ selectedCaseId: id });
+        statut: "a_valider" as const,
+        planche_id: pageOf(seed, pid)?.id,
+        ordre: 0,
+      };
+      seed.cases.push(created);
+      syncStoryOrder(seed);
+      created.numero = String(created.ordre);
+      set({ selectedCaseId: id, visualPageIndex: visualPageIndexOf(seed.cases, id) });
       bump();
     },
 
@@ -543,16 +552,18 @@ export const useStudio = create<StudioState>((set, get) => {
       const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
       const project = archive?.projects.find((p) => p.id === id);
       if (!archive || !project) return;
+      const seed = normalizeSeed(project.seed);
+      const meta = normalizeMeta(project.meta);
       const snapshot = captureRawLocalSnapshot();
       try {
-        saveLocalSnapshot(project.seed, project.meta, project.mediaMeta);
+        saveLocalSnapshot(seed, meta, project.mediaMeta);
         localStorage.setItem(LS_PROJECTS, JSON.stringify({ ...archive, activeId: id }));
       } catch {
         try { restoreRawLocalSnapshot(snapshot); } catch { /* Original snapshot remains in the archive. */ }
         toast.error("Impossible d’ouvrir ce projet");
         return;
       }
-      set({ seed: project.seed, meta: project.meta, mediaMeta: project.mediaMeta, activeProjectId: id, selectedCaseId: null, revision: get().revision + 1 });
+      set({ seed, meta, mediaMeta: project.mediaMeta, activeProjectId: id, selectedCaseId: null, revision: get().revision + 1 });
     },
 
     deletePlanche(id) {
@@ -562,6 +573,7 @@ export const useStudio = create<StudioState>((set, get) => {
       seed.planches.forEach((p, i) => {
         p.numero = i + 1;
       });
+      syncStoryOrder(seed);
       const meta = get().meta;
       delete meta.statuts[id];
       delete meta.notes[id];
@@ -569,14 +581,18 @@ export const useStudio = create<StudioState>((set, get) => {
       toast.success("Planche supprimée");
     },
 
-    deleteCase(pid, cid) {
-      const p = pageOf(get().seed, pid);
-      if (!p) return;
-      p.cases = p.cases.filter((c) => c.id !== cid);
-      p.cases.forEach((c, i) => {
-        c.numero = String(i + 1);
+    deleteCase(_pid, cid) {
+      const seed = get().seed;
+      const cases = seed.cases || [];
+      const index = cases.findIndex((c) => c.id === cid);
+      if (index < 0) return;
+      cases.splice(index, 1);
+      syncStoryOrder(seed);
+      const next = cases[Math.min(index, cases.length - 1)] || null;
+      set({
+        selectedCaseId: get().selectedCaseId === cid ? null : get().selectedCaseId,
+        visualPageIndex: next ? visualPageIndexOf(cases, next.id) : 0,
       });
-      if (get().selectedCaseId === cid) set({ selectedCaseId: p.cases[0]?.id ?? null });
       bump();
     },
 
@@ -589,6 +605,7 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((p, idx) => {
         p.numero = idx + 1;
       });
+      syncStoryOrder(get().seed);
       bump();
     },
 
@@ -603,20 +620,30 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((page, idx) => {
         page.numero = idx + 1;
       });
+      syncStoryOrder(get().seed);
+      bump();
+    },
+
+    moveCase(caseId, anchorId, place) {
+      if (!moveCaseRelative(get().seed, caseId, anchorId, place)) return;
+      bump();
+    },
+
+    moveCaseStep(caseId, dir) {
+      if (!moveCaseBy(get().seed, caseId, dir)) return;
+      bump();
+    },
+
+    moveCaseTo(caseId, index) {
+      if (!moveCaseToIndex(get().seed, caseId, index)) return;
       bump();
     },
 
     async replaceCaseImage(cid, file) {
-      const entry = (() => {
-        for (const p of get().seed.planches) {
-          const c = p.cases.find((x) => x.id === cid);
-          if (c) return { p, c };
-        }
-        return null;
-      })();
-      if (!entry) return;
+      const panel = storyCases(get().seed).find((c) => c.id === cid);
+      if (!panel) return;
       const ref = await putCaseImage(cid, file);
-      entry.c.image = ref;
+      panel.image = ref;
       bump();
       toast.success("Image enregistrée");
     },
@@ -640,9 +667,7 @@ export const useStudio = create<StudioState>((set, get) => {
       const images = new Map<string, string>();
       const personImages = new Map<string, string>();
       const guardianImages = new Map<string, string>();
-      for (const p of current.planches) {
-        for (const c of p.cases) if (c.image) images.set(c.id, c.image);
-      }
+      for (const c of storyCases(current)) if (c.image) images.set(c.id, c.image);
       for (const person of current.personnages || []) {
         if (person.image) personImages.set(person.id, person.image);
       }
@@ -662,7 +687,7 @@ export const useStudio = create<StudioState>((set, get) => {
       const normalized = normalizeSeed(seed);
       const meta = emptyMeta();
       for (const p of normalized.planches) {
-        meta.statuts[p.id] = inferPageStatus(p);
+        meta.statuts[p.id] = inferPageStatus(p, normalized);
       }
       set({
         seed: normalized,
@@ -677,7 +702,7 @@ export const useStudio = create<StudioState>((set, get) => {
     importSeedJson(data) {
       const seed = parseSeed(data);
       const meta = emptyMeta();
-      for (const p of seed.planches) meta.statuts[p.id] = inferPageStatus(p);
+      for (const p of seed.planches) meta.statuts[p.id] = inferPageStatus(p, seed);
       set({ seed, meta, selectedCaseId: null, visualPageIndex: 0, recoveryRequired: false });
       bump();
       toast.success("Seed de travail importé");
@@ -724,6 +749,8 @@ export function filteredPages(seed: Seed, meta: Meta) {
   const f = meta.filters;
   const q = (f.q || "").trim().toLowerCase();
   return seed.planches.filter((p) => {
+    const cases = storyCases(seed).filter((c) => c.planche_id === p.id);
+    const pageCases = cases.length ? cases : p.cases || [];
     const gs = Object.values(p.gardien_etat || {})
       .filter((x) => x?.present)
       .map((x) => String(x.niveau));
@@ -734,7 +761,7 @@ export function filteredPages(seed: Seed, meta: Meta) {
       p.date_histoire,
       p.instructions_planche,
       ...(p.notes_planche || []),
-      ...(p.cases || []).flatMap((c) => [
+      ...pageCases.flatMap((c) => [
         c.numero,
         c.titre,
         c.description,
@@ -749,7 +776,7 @@ export function filteredPages(seed: Seed, meta: Meta) {
     return (
       (!q || hay.includes(q)) &&
       (!f.chapitre || p.chapitre === f.chapitre) &&
-      (!f.personnage || (p.cases || []).some((c) => (c.personnages || []).includes(f.personnage))) &&
+      (!f.personnage || pageCases.some((c) => (c.personnages || []).includes(f.personnage))) &&
       (!f.gardien || gs.includes(f.gardien)) &&
       (!f.statut || pageStatusOf(meta, p.id) === f.statut)
     );

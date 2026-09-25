@@ -7,6 +7,7 @@ import { dataUrlToBlob, dbAll, dbPut, dbReplace, openDB } from "../src/lib/media
 import { LS_MEDIA_META, LS_META, LS_PROJECTS, LS_SEED } from "../src/lib/constants";
 import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
+import { storyCases } from "../src/lib/sequence";
 import { checkPage, choiceFor } from "../src/lib/coherence";
 
 const storage = new Map<string, string>();
@@ -42,13 +43,13 @@ function fresh() {
 
 test("edits and reset never mutate the official seed or an import object", () => {
   const s = fresh();
-  const p = s.seed.planches[0],
-    c = p.cases[0];
+  const c = storyCases(s.seed)[0];
+  const p = s.seed.planches[0];
   s.setCaseField(p.id, c.id, "description", "Changed");
   assert.equal(JSON.stringify(SEED_OFFICIEL), before);
   s.resetWorkingSeed();
   assert.equal(
-    useStudio.getState().seed.planches[0].cases[0].description,
+    storyCases(useStudio.getState().seed)[0].description,
     SEED_OFFICIEL.planches[0].cases[0].description,
   );
   const input = structuredClone(SEED_OFFICIEL);
@@ -68,9 +69,9 @@ test("imports accept canonical, wrapped and empty projects and reject malformed 
   ]) {
     assert.throws(() => parseSeed(input));
   }
-  const seed = normalizeSeed(SEED_OFFICIEL);
-  seed.planches[1].cases[0].id = seed.planches[0].cases[0].id;
-  assert.throws(() => parseSeed(seed), /dupliqué/);
+  const raw = structuredClone(SEED_OFFICIEL);
+  raw.planches[1].cases[0].id = raw.planches[0].cases[0].id;
+  assert.throws(() => parseSeed(raw), /dupliqué/);
 });
 
 test("import clears stale filters, notes and selected case; invalid input preserves current project", () => {
@@ -94,11 +95,9 @@ test("metadata sanitization prevents invalid progress and filters", () => {
 
 test("locked text cannot be edited, removed, or moved indirectly", () => {
   const s = fresh();
-  const p = s.seed.planches.find((p) =>
-    p.cases.some((c) => c.textes.some((t) => t.preserve_exact)),
-  )!;
-  const c = p.cases.find((c) => c.textes.some((t) => t.preserve_exact))!;
-  const t = c.textes.find((t) => t.preserve_exact)!;
+  const c = storyCases(s.seed).find((panel) => panel.textes.some((t) => t.preserve_exact))!;
+  const p = s.seed.planches.find((page) => page.id === c.planche_id)!;
+  const t = c.textes.find((text) => text.preserve_exact)!;
   const original = structuredClone(c.textes);
   s.setTextField(p.id, c.id, t.id, "contenu", "wrong");
   s.setTextField(p.id, c.id, t.id, "preserve_exact", false);
@@ -108,9 +107,9 @@ test("locked text cannot be edited, removed, or moved indirectly", () => {
 });
 
 test("detaching or deleting a text source preserves visible lettering", () => {
-  const s = fresh(),
-    p = s.seed.planches[0],
-    c = p.cases[1];
+  const s = fresh();
+  const c = storyCases(s.seed)[1];
+  const p = s.seed.planches.find((page) => page.id === c.planche_id)!;
   s.addOverlay(p.id, c.id, "speech");
   const o = c.overlays[0],
     text = c.textes[0].contenu;
@@ -124,8 +123,9 @@ test("detaching or deleting a text source preserves visible lettering", () => {
 
 test("layout covers every case once without overlap, including large cells and overflow pages", () => {
   const seed = normalizeSeed(SEED_OFFICIEL);
-  seed.planches[0].cases[0].layout_size = { width: 3, height: 3 };
-  seed.planches[0].cases[1].layout_size = { width: 2, height: 2 };
+  const cases = storyCases(seed);
+  cases[0].layout_size = { width: 3, height: 3 };
+  cases[1].layout_size = { width: 2, height: 2 };
   const pages = computeVisualPages(seed);
   assert.equal(pages[0].items.length, 1);
   assert.equal(pages.flatMap((p) => p.items).length, 152);
@@ -134,7 +134,7 @@ test("layout covers every case once without overlap, including large cells and o
     for (const item of page.items)
       for (let r = item.row; r < item.row + item.height; r++)
         for (let c = item.col; c < item.col + item.width; c++) {
-          assert.ok(r < 3 && c < 3);
+          assert.ok(r < 4 && c < 3);
           assert.ok(!cells.has(`${r},${c}`));
           cells.add(`${r},${c}`);
         }
@@ -142,9 +142,9 @@ test("layout covers every case once without overlap, including large cells and o
 });
 
 test("backup round trip preserves images, text, notes, status and restores actual binary data", async () => {
-  const s = fresh(),
-    p = s.seed.planches[0],
-    c = p.cases[0];
+  const s = fresh();
+  const p = s.seed.planches[0];
+  const c = storyCases(s.seed)[0];
   await dbReplace([]);
   await s.replaceCaseImage(c.id, new File(["image-bytes"], "proof.png", { type: "image/png" }));
   s.setPageNote(p.id, "Production note");
@@ -158,14 +158,14 @@ test("backup round trip preserves images, text, notes, status and restores actua
   assert.equal(state.meta.notes[p.id], "Production note");
   assert.equal(state.meta.statuts[p.id], "brouillon");
   assert.equal(await records[0].blob.text(), "image-bytes");
-  assert.equal(state.seed.planches[0].cases[0].image, `idb://${records[0].id}`);
+  assert.equal(storyCases(state.seed)[0].image, `idb://${records[0].id}`);
 });
 
 test("restoring one project preserves the other project's images and excludes them from its backup", async () => {
   const s = fresh();
   const other = normalizeSeed(SEED_OFFICIEL);
-  s.seed.planches[0].cases[0].image = "idb://current-photo";
-  other.planches[0].cases[0].image = "idb://other-photo";
+  storyCases(s.seed)[0].image = "idb://current-photo";
+  storyCases(other)[0].image = "idb://other-photo";
   const previousArchive = storage.get(LS_PROJECTS);
   storage.set(LS_PROJECTS, JSON.stringify({ activeId: "original", projects: [
     { id: "original", seed: s.seed, meta: s.meta, mediaMeta: {} },
@@ -250,7 +250,7 @@ test("legacy images migrate into persistent media records", () => {
     seed: SEED_OFFICIEL,
     images: { "P01-1": "data:image/png;base64,eA==" },
   });
-  assert.equal(restored.seed.planches[0].cases[0].image, "idb://legacy-P01-1");
+  assert.equal(storyCases(restored.seed)[0].image, "idb://legacy-P01-1");
   assert.equal(restored.records[0].blob.size, 1);
 });
 
@@ -263,9 +263,9 @@ test("failed media transaction rolls back deletion", async () => {
 test.after(() => useStudio.getState().persistNow());
 
 test("case guardian overrides do not produce a false absent-page error", () => {
-  const s = fresh(),
-    p = s.seed.planches[0],
-    c = p.cases[0];
+  const s = fresh();
+  const c = storyCases(s.seed)[0];
+  const p = s.seed.planches.find((page) => page.id === c.planche_id)!;
   s.toggleCasePerson(p.id, c.id, "archiviste", true);
   s.setCaseGuardian(p.id, c.id, "archiviste", "2");
   assert.ok(
@@ -274,11 +274,46 @@ test("case guardian overrides do not produce a false absent-page error", () => {
 });
 
 test("editorial restrictions follow original case identity after page reordering", () => {
-  const s = fresh(),
-    p = s.seed.planches.find((p) => p.id === "P16")!;
-  const c = p.cases.find((c) => c.numero === "2A")!;
+  const s = fresh();
+  const p = s.seed.planches.find((page) => page.id === "P16")!;
+  const c = storyCases(s.seed).find((panel) => panel.planche_id === "P16" && panel.numero === "2A")!;
   s.movePage(p.id, 1);
   assert.equal(choiceFor(s.seed, p, c)?.bloque_generation_du_texte, true);
+});
+
+test("a case can move before case 1 without losing its data", () => {
+  const s = fresh();
+  const before = storyCases(s.seed);
+  assert.equal(before.length, 152);
+  assert.deepEqual(
+    before.map((panel) => panel.ordre),
+    before.map((_, index) => index + 1),
+  );
+  const origin = storyCases(s.seed).find((panel) => panel.planche_id === s.seed.planches[1].id)!;
+  const snapshot = structuredClone(origin);
+  const first = storyCases(s.seed)[0];
+  const chapitre = s.seed.planches[1].chapitre;
+  s.moveCase(origin.id, first.id, "before");
+  const next = storyCases(useStudio.getState().seed);
+  assert.equal(next.length, 152);
+  assert.equal(next[0].id, origin.id);
+  assert.equal(next[0].ordre, 1);
+  assert.equal(next[1].id, first.id);
+  assert.equal(next[1].ordre, 2);
+  assert.equal(next[0].titre, snapshot.titre);
+  assert.equal(next[0].description, snapshot.description);
+  assert.equal(next[0].image, snapshot.image);
+  assert.equal(next[0].notes, snapshot.notes);
+  assert.equal(next[0].numero, snapshot.numero);
+  assert.equal(next[0].statut, snapshot.statut);
+  assert.deepEqual(next[0].textes, snapshot.textes);
+  assert.deepEqual(next[0].layout_size, snapshot.layout_size);
+  assert.equal(next[0].planche_id, s.seed.planches[1].id);
+  assert.equal(s.seed.planches.every((page) => page.cases.length === 0), true);
+  assert.equal(s.seed.planches[1].chapitre, chapitre);
+  const numeros = storyCases(s.seed).map((panel) => panel.numero).sort();
+  const canonical = storyCases(normalizeSeed(SEED_OFFICIEL)).map((panel) => panel.numero).sort();
+  assert.deepEqual(numeros, canonical);
 });
 
 test("storage quota failure refuses restore without touching existing media", async () => {

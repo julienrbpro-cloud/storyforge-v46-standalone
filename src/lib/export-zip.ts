@@ -2,6 +2,7 @@ import { clone } from "./seed";
 import { activeProjectMedia, dbAll, imageExt } from "./media";
 import type { Meta, Seed } from "./types";
 import { createSession } from "./session";
+import { storyCases } from "./sequence";
 import { toast } from "sonner";
 
 const CRC_TABLE = (() => {
@@ -110,18 +111,9 @@ export function downloadJson(data: unknown, name: string) {
   downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), name);
 }
 
-function exportAssetPath(
-  numero: number,
-  caseNumero: string,
-  caseId: string,
-  mime?: string,
-  name?: string,
-) {
-  const pn = String(numero).padStart(2, "0");
-  const raw = String(caseNumero);
-  const clean = raw.toLowerCase().replace(/[^a-z0-9]+/g, "") || caseId.toLowerCase().replace(/[^a-z0-9]+/g, "");
-  const cn = /^\d+$/.test(clean) ? clean.padStart(2, "0") : clean.replace(/^(\d)(\D)/, "0$1$2");
-  return `assets/bd/p${pn}/c${cn}.${imageExt(mime, name)}`;
+export function caseAssetPath(index: number, caseId: string, mime?: string, name?: string) {
+  const safe = caseId.toLowerCase().replace(/[^a-z0-9_-]+/g, "") || "case";
+  return `assets/bd/c${String(index + 1).padStart(3, "0")}-${safe}.${imageExt(mime, name)}`;
 }
 
 export async function exportProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown) {
@@ -149,26 +141,26 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
     target: string;
     name: string | null;
   }> = [];
-  for (const p of portable.planches || []) {
-    for (const c of p.cases || []) {
-      if (!c.image) continue;
-      const source = c.image;
-      let rec;
-      if (source.startsWith("idb://")) rec = byId.get(source.slice(6));
-      else {
-        const response = await fetch(source);
-        if (!response.ok) throw new Error(`Image inaccessible : ${c.id}`);
-        const blob = await response.blob();
-        if (!blob.type.startsWith("image/")) throw new Error(`Fichier image invalide : ${c.id}`);
-        rec = { blob, mime: blob.type, name: source.split("/").pop() };
-      }
-      if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${c.id}`);
-      let path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
-      if (entries.some((e) => e.name === path)) path = path.replace(/(\.[^.]+)$/, `-${manifest.length}$1`);
-      entries.push({ name: path, data: await rec.blob.arrayBuffer() });
-      manifest.push({ case_id: c.id, owner_type: "case", owner_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
-      c.image = "./" + path;
+  const ordered = storyCases(portable);
+  for (const c of ordered) {
+    if (!c.image) continue;
+    const source = c.image;
+    let rec;
+    if (source.startsWith("idb://")) rec = byId.get(source.slice(6));
+    else {
+      const response = await fetch(source);
+      if (!response.ok) throw new Error(`Image inaccessible : ${c.id}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/")) throw new Error(`Fichier image invalide : ${c.id}`);
+      rec = { blob, mime: blob.type, name: source.split("/").pop() };
     }
+    if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${c.id}`);
+    const index = ordered.indexOf(c);
+    let path = caseAssetPath(index, c.id, rec.mime || rec.blob.type, rec.name);
+    if (entries.some((e) => e.name === path)) path = path.replace(/(\.[^.]+)$/, `-${manifest.length}$1`);
+    entries.push({ name: path, data: await rec.blob.arrayBuffer() });
+    manifest.push({ case_id: c.id, owner_type: "case", owner_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });
+    c.image = "./" + path;
   }
 
   async function addReferenceImage(

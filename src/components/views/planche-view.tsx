@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { checkPage } from "@/lib/coherence";
 import { useStudio } from "@/lib/store";
 import { printStoryboard } from "@/lib/print";
+import { caseLabel } from "@/lib/sequence";
 import { padPage } from "@/lib/utils";
 import { computeVisualPages } from "@/lib/visual-layout";
 import { useEffect, useState } from "react";
@@ -52,7 +53,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
       </AppShell>
     );
   }
-  const panel = p.cases.find((c) => c.id === selected) || p.cases[0] || null;
+  const panel = selected ? p.cases.find((c) => c.id === selected) || null : p.cases[0] || null;
   const issues = checkPage(seed, p).filter((x) => x.level === "error");
   const visualPages = computeVisualPages({ ...seed, planches: [p] });
   const currentIndex = Math.min(pageIndex, Math.max(0, visualPages.length - 1));
@@ -65,7 +66,6 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
 
   return (
     <AppShell
-      hideNav
       back={
         <Link to="/projet" className="grid size-10 place-items-center text-cream">
           <ArrowLeft className="size-5" />
@@ -148,9 +148,6 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
               <Field label="Titre">
                 <Input value={p.titre || ""} onChange={(e) => setPageField(p.id, "titre", e.target.value)} />
               </Field>
-              <Field label="Chapitre">
-                <Input value={p.chapitre || ""} onChange={(e) => setPageField(p.id, "chapitre", e.target.value)} />
-              </Field>
               <Field label="Date dans l’histoire">
                 <Input
                   value={p.date_histoire || ""}
@@ -222,7 +219,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
             }
           }}
         >
-          <DialogContent title={`Case ${panel.numero}`}>
+          <DialogContent title={`Case ${caseLabel(panel)}`}>
             <CaseInspector page={p} panel={panel} />
             <Button
               variant="danger"

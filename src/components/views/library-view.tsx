@@ -1,23 +1,15 @@
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CaseImage } from "@/components/case-image";
-import { PaperSheet, TabsBar } from "@/components/paper-sheet";
+import { PaperSheet } from "@/components/paper-sheet";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OFFICIAL_REFS } from "@/lib/constants";
-import { allIssues } from "@/lib/coherence";
 import { pickImage } from "@/lib/files";
 import { useStudio } from "@/lib/store";
-import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-
-const TABS = [
-  ["personnages", "Personnages"],
-  ["regles", "Règles"],
-  ["coherence", "Cohérence"],
-] as const;
 
 function officialImage(entityId: string) {
   return OFFICIAL_REFS.find((r) => r.entityId === entityId)?.data || null;
@@ -39,7 +31,6 @@ export function LibraryView() {
   const addPerson = useStudio((s) => s.addLibraryPerson);
   const addGuardian = useStudio((s) => s.addLibraryGuardian);
   const addRule = useStudio((s) => s.addEditorialRule);
-  const [tab, setTab] = useState<(typeof TABS)[number][0]>("personnages");
   void revision;
 
   async function chooseImage(kind: "personnage" | "gardien", id: string) {
@@ -52,36 +43,31 @@ export function LibraryView() {
   }
 
   return (
-    <AppShell title={<div className="font-display text-lg">Bibliothèque</div>} showSearch>
+    <AppShell
+      showSearch
+      back={
+        <Link to="/projet" aria-label="Retour au projet" className="grid size-10 place-items-center text-cream">
+          <ArrowLeft className="size-5" />
+        </Link>
+      }
+      title={<div className="font-display text-lg leading-tight">Personnages & règles</div>}
+    >
       <div className="view-enter flex min-h-0 flex-1 flex-col">
-        <p className="px-4 pt-3 pb-1 text-sm text-muted">
-          Le monde de {seed.projet.titre} — visages, règles, et ce qui doit rester cohérent.
-        </p>
+        <p className="px-4 pt-3 pb-1 text-sm text-muted">Le monde de {seed.projet.titre}.</p>
         <PaperSheet>
-          <TabsBar tabs={TABS} value={tab} onChange={(id) => setTab(id as (typeof TABS)[number][0])} />
-
-          {tab === "personnages" ? (
+          <section id="personnages" className="space-y-3">
+            <h3 className="font-display text-xl">Personnages</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               {(seed.personnages || []).map((person) => {
                 const image = person.image || (activeProjectId === "original" ? officialImage(person.id) : null);
                 return (
-                  <article key={person.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
-                    <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
-                      {image ? (
-                        <CaseImage src={image} alt={person.nom || person.id} className="h-full w-full object-contain" />
-                      ) : (
-                        <div className="font-display text-3xl text-accent">{(person.nom || person.id).slice(0, 1)}</div>
-                      )}
-                      <Button
-                        type="button"
-                        variant="paper"
-                        size="sm"
-                        className="absolute right-2 bottom-2 rounded-md"
-                        onClick={() => void chooseImage("personnage", person.id)}
-                      >
-                        Remplacer l’image
-                      </Button>
-                    </div>
+                  <article key={person.id} className="rounded-xl border border-paper-line bg-paper">
+                    <ReferencePortrait
+                      image={image}
+                      alt={person.nom || person.id}
+                      fallback={(person.nom || person.id).slice(0, 1)}
+                      onReplace={() => void chooseImage("personnage", person.id)}
+                    />
                     <div className="space-y-2 p-3">
                       <Field label="Nom">
                         <Input
@@ -105,30 +91,29 @@ export function LibraryView() {
                   </article>
                 );
               })}
+            </div>
+            <Button variant="paper" onClick={addPerson}>Ajouter un personnage</Button>
+          </section>
 
+          <section id="gardiens" className="mt-8 space-y-3">
+            <h3 className="font-display text-xl">Gardiens</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
               {(seed.gardiens || []).map((guardian) => {
                 const image = guardian.image || (activeProjectId === "original" ? officialImage(guardian.id) : null);
                 return (
-                  <article key={guardian.id} className="overflow-hidden rounded-xl border border-paper-line bg-paper">
-                    <div className="relative grid h-56 place-items-center overflow-hidden bg-cream-2">
-                      {image ? (
-                        <CaseImage src={image} alt={guardian.nom || guardianTitle(guardian.id)} className="h-full w-full object-contain" />
-                      ) : (
-                        <div className="font-display text-3xl text-accent">{(guardian.nom || guardianTitle(guardian.id)).slice(0, 1)}</div>
-                      )}
-                      <Button
-                        type="button"
-                        variant="paper"
-                        size="sm"
-                        className="absolute right-2 bottom-2 rounded-md"
-                        onClick={() => void chooseImage("gardien", guardian.id)}
-                      >
-                        Remplacer l’image
-                      </Button>
-                    </div>
+                  <article key={guardian.id} className="rounded-xl border border-paper-line bg-paper">
+                    <ReferencePortrait
+                      image={image}
+                      alt={guardian.nom || guardianTitle(guardian.id)}
+                      fallback={(guardian.nom || guardianTitle(guardian.id)).slice(0, 1)}
+                      onReplace={() => void chooseImage("gardien", guardian.id)}
+                    />
                     <div className="space-y-2 p-3">
                       <Field label="Nom">
-                        <Input value={guardian.nom || guardianTitle(guardian.id)} onChange={(e) => setEntityField("gardien", guardian.id, "nom", e.target.value)} />
+                        <Input
+                          value={guardian.nom || guardianTitle(guardian.id)}
+                          onChange={(e) => setEntityField("gardien", guardian.id, "nom", e.target.value)}
+                        />
                       </Field>
                       <Field label="Rôle">
                         <Input
@@ -136,7 +121,7 @@ export function LibraryView() {
                           onChange={(e) => setEntityField("gardien", guardian.id, "role", e.target.value)}
                         />
                       </Field>
-                      <Field label="Fonction protectrice">
+                      <Field label="Description">
                         <Textarea
                           value={guardian.fonction_protectrice || ""}
                           onChange={(e) =>
@@ -170,92 +155,65 @@ export function LibraryView() {
                   </article>
                 );
               })}
-              <div className="col-span-full flex flex-wrap gap-2">
-                <Button variant="paper" onClick={addPerson}>Ajouter un personnage</Button>
-                {seed.gardiens.length < 2 ? <Button variant="paper" onClick={addGuardian}>Ajouter un gardien</Button> : null}
+            </div>
+            {seed.gardiens.length < 2 ? (
+              <Button variant="paper" onClick={addGuardian}>Ajouter un gardien</Button>
+            ) : null}
+          </section>
+
+          <section id="regles" className="mt-8 space-y-3">
+            <h3 className="font-display text-xl">Règles</h3>
+            {(seed.regles_editoriales || []).length ? (
+              (seed.regles_editoriales || []).map((rule) => (
+                <article key={rule.id} className="space-y-2 rounded-xl border border-paper-line bg-paper p-3">
+                  <Field label="Titre">
+                    <Input value={rule.titre} onChange={(e) => setRuleField(rule.id, "titre", e.target.value)} />
+                  </Field>
+                  <Field label="Contenu">
+                    <Textarea
+                      className="min-h-28"
+                      value={rule.contenu}
+                      onChange={(e) => setRuleField(rule.id, "contenu", e.target.value)}
+                    />
+                  </Field>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
+                Aucune règle éditoriale.
               </div>
-            </div>
-          ) : null}
-
-          {tab === "regles" ? (
-            <div className="space-y-3">
-              {(seed.regles_editoriales || []).length ? (
-                (seed.regles_editoriales || []).map((rule) => (
-                  <article key={rule.id} className="space-y-2 rounded-xl border border-paper-line bg-paper p-3">
-                    <Field label="Titre">
-                      <Input
-                        value={rule.titre}
-                        onChange={(e) => setRuleField(rule.id, "titre", e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Contenu">
-                      <Textarea
-                        className="min-h-28"
-                        value={rule.contenu}
-                        onChange={(e) => setRuleField(rule.id, "contenu", e.target.value)}
-                      />
-                    </Field>
-                  </article>
-                ))
-              ) : (
-                <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
-                  Aucune règle éditoriale.
-                </div>
-              )}
-              <Button variant="paper" className="w-full" onClick={addRule}>Ajouter une règle</Button>
-            </div>
-          ) : null}
-
-          {tab === "coherence" ? <CoherencePanel /> : null}
+            )}
+            <Button variant="paper" className="w-full" onClick={addRule}>
+              Ajouter une règle
+            </Button>
+          </section>
         </PaperSheet>
       </div>
     </AppShell>
   );
 }
 
-function CoherencePanel() {
-  const seed = useStudio((s) => s.seed);
-  const revision = useStudio((s) => s.revision);
-  const navigate = useNavigate();
-  void revision;
-  const list = allIssues(seed);
-  const errors = list.filter((x) => x.level === "error").length;
-  const warns = list.filter((x) => x.level === "warn").length;
+function ReferencePortrait({
+  image,
+  alt,
+  fallback,
+  onReplace,
+}: {
+  image: string | null;
+  alt: string;
+  fallback: string;
+  onReplace: () => void;
+}) {
   return (
-    <>
-      <div className="mb-3 flex gap-2">
-        <span className="rounded-full bg-chip px-2.5 py-1.5 text-[11px] font-extrabold text-chip-fg">
-          {errors} erreur{errors > 1 ? "s" : ""}
-        </span>
-        <span className="rounded-full bg-chip px-2.5 py-1.5 text-[11px] font-extrabold text-chip-fg">
-          {warns} avertissement{warns > 1 ? "s" : ""}
-        </span>
-      </div>
-      <div className="flex flex-col gap-2">
-        {list.length ? (
-          list.map((x) => (
-            <button
-              key={`${x.pageId}-${x.title}`}
-              type="button"
-              className={cn(
-                "rounded-xl border p-2.5 text-left text-xs leading-snug",
-                x.level === "error" && "border-danger/40 bg-danger/10 text-danger",
-                x.level === "warn" && "border-accent/40 bg-chip text-chip-fg",
-              )}
-              onClick={() =>
-                x.pageId && void navigate({ to: "/planche/$plancheId", params: { plancheId: x.pageId } })
-              }
-            >
-              <b className="mb-0.5 block">
-                P{x.pageNumero} — {x.title}
-              </b>
-              {x.text}
-            </button>
-          ))
-        ) : (
-          <div className="rounded-xl border border-ok/40 bg-ok/15 p-2.5 text-sm text-chip-fg">Tout est cohérent.</div>
-        )}
-      </div>
-    </>
+    <div className="bg-cream-2 p-3">
+      {image ? (
+        <CaseImage src={image} alt={alt} className="mx-auto block h-auto max-h-[70vh] w-full object-contain" />
+      ) : (
+        <div className="grid h-36 place-items-center font-display text-3xl text-accent">{fallback}</div>
+      )}
+      <Button type="button" variant="paper" size="sm" className="mt-3 w-full rounded-md" onClick={onReplace}>
+        Remplacer l’image
+      </Button>
+    </div>
   );
 }

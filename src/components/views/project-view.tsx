@@ -1,73 +1,113 @@
-import { useEffect } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal, Plus, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft, MoreHorizontal, Plus, Printer } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { PaperSheet, TabsBar } from "@/components/paper-sheet";
+import { CaseCard } from "@/components/case-card";
+import { CaseInspector } from "@/components/case-inspector";
+import { PaperSheet } from "@/components/paper-sheet";
 import { ProgressBar } from "@/components/progress-bar";
-import { PageStatusBadge } from "@/components/status-badge";
-import { CaseImage } from "@/components/case-image";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { checkPage } from "@/lib/coherence";
-import { filteredPages, useStudio } from "@/lib/store";
-import { exportProjectZip, downloadJson } from "@/lib/export-zip";
-import { printStoryboard } from "@/lib/print";
-import { progressOf, PROJECT_GENRES, shortChapter } from "@/lib/project";
-import { padPage } from "@/lib/utils";
+import { printVisualPage } from "@/lib/print";
+import { progressOf, PROJECT_GENRES } from "@/lib/project";
+import { totalCases } from "@/lib/seed";
+import { caseLabel, storyCases } from "@/lib/sequence";
+import { useStudio } from "@/lib/store";
+import type { Planche } from "@/lib/types";
+import { computeVisualPages, visualPageIndexOf } from "@/lib/visual-layout";
 
-const TABS = [
-  ["planches", "Planches"],
-  ["fichiers", "Exports"],
-] as const;
+const EMPTY_PAGE: Planche = {
+  id: "",
+  numero: 0,
+  titre: "",
+  chapitre: null,
+  date_histoire: null,
+  gardien_etat: {
+    archiviste: { present: false, niveau: null },
+    armurier: { present: false, niveau: null },
+  },
+  instructions_planche: null,
+  notes_planche: null,
+  cases: [],
+};
 
-export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS)[number][0]; chapitre?: string }) {
+export function ProjectView() {
   const seed = useStudio((s) => s.seed);
   const activeProjectId = useStudio((s) => s.activeProjectId);
   const meta = useStudio((s) => s.meta);
   const revision = useStudio((s) => s.revision);
-  const setFilter = useStudio((s) => s.setFilter);
-  const addPlanche = useStudio((s) => s.addPlanche);
-  const movePage = useStudio((s) => s.movePage);
-  const dropPage = useStudio((s) => s.dropPage);
-  const deletePlanche = useStudio((s) => s.deletePlanche);
-  const setSearchOpen = useStudio((s) => s.setSearchOpen);
-  const navigate = useNavigate();
+  const index = useStudio((s) => s.visualPageIndex);
+  const setIndex = useStudio((s) => s.setVisualPageIndex);
+  const selected = useStudio((s) => s.selectedCaseId);
+  const setSelected = useStudio((s) => s.setSelectedCase);
+  const addCase = useStudio((s) => s.addCase);
+  const deleteCase = useStudio((s) => s.deleteCase);
+  const [boardOpen, setBoardOpen] = useState(false);
   void revision;
-  const pages = filteredPages(seed, meta);
+  const cases = storyCases(seed);
+  const pages = computeVisualPages(seed);
+  const pageIndex = Math.min(Math.max(index, 0), Math.max(0, pages.length - 1));
+  const page = pages[pageIndex];
   const prog = progressOf(seed, meta);
+  const panel = selected ? cases.find((item) => item.id === selected) || null : null;
+  const editorPage = panel
+    ? seed.planches.find((item) => item.id === panel.planche_id) || EMPTY_PAGE
+    : undefined;
 
   useEffect(() => {
-    setFilter("chapitre", chapitre || "");
-  }, [chapitre, setFilter]);
+    if (!selected) return;
+    setBoardOpen(true);
+    setIndex(visualPageIndexOf(storyCases(useStudio.getState().seed), selected));
+  }, [selected, setIndex]);
 
-  function setTab(next: string) {
-    void navigate({ to: "/projet", search: { tab: next as (typeof TABS)[number][0], chapitre: meta.filters.chapitre || undefined } });
+  function closeEditor() {
+    const id = useStudio.getState().selectedCaseId;
+    if (id) setIndex(visualPageIndexOf(storyCases(useStudio.getState().seed), id));
+    setSelected(null);
   }
 
   return (
     <AppShell
+      showSearch
       back={
-        <Link to="/atelier" className="grid size-10 place-items-center text-cream">
+        <Link to="/" aria-label="Projets" className="grid size-10 place-items-center text-cream">
           <ArrowLeft className="size-5" />
         </Link>
       }
       title={<span className="sr-only">{seed.projet.titre}</span>}
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" size="icon" title="Rechercher" onClick={() => setSearchOpen(true)}>
-            <Search className="size-4" />
-          </Button>
-        </div>
+        boardOpen && pages.length ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="secondary" size="icon" title="Plus">
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onSelect={() => void printVisualPage(useStudio.getState().seed, pageIndex)}>
+                <Printer className="size-4" />
+                Imprimer la planche
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null
       }
     >
       <div className="view-enter flex min-h-0 flex-1 flex-col">
         <div className="border-b border-line px-4 py-3 text-center">
+          {activeProjectId === "original" ? (
+            <img
+              src="/assets/nous-malgre-nous-cover.png"
+              alt=""
+              className="mx-auto mb-3 max-h-48 w-full object-contain"
+            />
+          ) : null}
           <h2 className="font-display text-2xl">{seed.projet.titre}</h2>
           {activeProjectId === "original" ? <div className="mt-1 text-xs text-muted">{PROJECT_GENRES}</div> : null}
           {seed.projet.sous_titre ? (
@@ -75,211 +115,113 @@ export function ProjectView({ tab = "planches", chapitre }: { tab?: (typeof TABS
               « {seed.projet.sous_titre} »
             </p>
           ) : null}
+          <p className="mt-2 text-xs text-muted">
+            {pages.length} planches visuelles · {totalCases(seed)} cases
+          </p>
         </div>
 
         <PaperSheet>
-          <TabsBar tabs={TABS} value={tab} onChange={setTab} />
-
-          {tab === "planches" ? (
+          <div className="mb-3 grid grid-cols-2 gap-2">
+            <Button asChild variant="paper" className="h-auto min-h-11 w-full whitespace-normal px-2 text-center">
+              <Link to="/bibliotheque">Personnages & règles</Link>
+            </Button>
+            <Button asChild variant="paper" className="h-auto min-h-11 w-full whitespace-normal px-2 text-center">
+              <Link to="/donnees">Exporter</Link>
+            </Button>
+          </div>
+          <div className="mb-3 flex items-center gap-2.5">
+            <ProgressBar value={prog.pct} track="paper" className="flex-1" />
+            <span className="text-right text-xs font-bold text-chip-fg">{prog.label}</span>
+          </div>
+          {boardOpen && page ? (
             <>
-              <div className="mb-3 flex items-center gap-2.5">
-                <ProgressBar value={prog.pct} track="paper" className="flex-1" />
-                <span className="whitespace-nowrap text-xs font-bold text-chip-fg">{prog.label}</span>
+              <div className="mb-2.5 flex items-center gap-2">
+                <Button variant="paper" className="h-11 shrink-0" onClick={() => setBoardOpen(false)}>
+                  Toutes les planches
+                </Button>
+                <select
+                  aria-label="Planche visuelle"
+                  className="h-11 min-w-0 flex-1 rounded-md border border-paper-line bg-paper px-2 text-paper-ink"
+                  value={pageIndex}
+                  onChange={(event) => setIndex(Number(event.target.value))}
+                >
+                  {pages.map((_, i) => (
+                    <option key={i} value={i}>
+                      Planche {i + 1} / {pages.length}
+                    </option>
+                  ))}
+                </select>
               </div>
-              {meta.filters.chapitre ? (
-                <div className="mb-2 flex items-center justify-between rounded-lg bg-chip px-3 py-2 text-xs font-bold text-chip-fg">
-                  <span>{shortChapter(meta.filters.chapitre)}</span>
-                  <button type="button" className="text-tab-on" onClick={() => {
-                    setFilter("chapitre", "");
-                    void navigate({ to: "/projet", search: { tab } });
-                  }}>
-                    Tout voir
-                  </button>
-                </div>
-              ) : null}
-              <PlancheList
-                pages={pages}
-                onOpen={(id) => void navigate({ to: "/planche/$plancheId", params: { plancheId: id } })}
-                onMove={movePage}
-                onDrop={dropPage}
-                onDelete={deletePlanche}
-              />
-              <Button
-                className="mt-3 w-full"
-                onClick={() => {
-                  const id = addPlanche();
-                  void navigate({ to: "/planche/$plancheId", params: { plancheId: id } });
-                }}
-              >
-                <Plus className="size-4" />
-                Nouvelle planche
-              </Button>
+              <div className="visual-grid w-full max-w-[900px]">
+                {page.items.map(({ c, row, col, width, height }) => (
+                  <div
+                    key={c.id}
+                    className="min-h-0 min-w-0"
+                    style={{ gridColumn: `${col + 1} / span ${width}`, gridRow: `${row + 1} / span ${height}` }}
+                  >
+                    <CaseCard panel={c} compact selected={selected === c.id} onSelect={() => setSelected(c.id)} />
+                  </div>
+                ))}
+              </div>
             </>
-          ) : null}
-
-
-          {tab === "fichiers" ? (
-            <div className="space-y-2">
-              <p className="mb-3 rounded-xl border border-paper-line bg-paper p-3 text-[12px] leading-relaxed text-paper-muted">
-                Le manuscrit embarqué reste la base. Tes changements vivent dans ce navigateur jusqu’à l’export.
-              </p>
-              <FileLine
-                title="Export du projet"
-                st="ZIP · données + images"
-                action="Exporter"
-                onClick={() => void exportProjectZip(seed, meta, useStudio.getState().mediaMeta)}
-              />
-              <FileLine
-                title="Seed de travail"
-                st="JSON"
-                action="Exporter"
-                onClick={() => downloadJson(seed, "storyforge-seed-travail.json")}
-              />
-              <FileLine
-                title="Storyboard complet"
-                st="texte + images"
-                action="Imprimer"
-                onClick={() => void printStoryboard(seed, null)}
-              />
+          ) : pages.length ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {pages.map((visual, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Planche ${i + 1}`}
+                  className="rounded-xl border border-paper-line bg-paper p-2 text-left text-paper-ink"
+                  onClick={() => {
+                    setIndex(i);
+                    setBoardOpen(true);
+                  }}
+                >
+                  <span className="block font-display text-lg">Planche {i + 1}</span>
+                  <span aria-hidden="true" className="text-[11px] text-paper-muted">
+                    {visual.items.length} case{visual.items.length > 1 ? "s" : ""}
+                  </span>
+                  <span aria-hidden="true" className="mt-2 grid aspect-[3/4] grid-cols-3 grid-rows-4 gap-px">
+                    {visual.occupied.map((filled, cell) => (
+                      <span key={cell} className={filled ? "bg-paper-ink/75" : "bg-paper-line/50"} />
+                    ))}
+                  </span>
+                </button>
+              ))}
             </div>
-          ) : null}
+          ) : (
+            <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
+              Aucune planche.
+            </div>
+          )}
+          <Button className="mt-3 w-full" onClick={() => addCase("")}>
+            <Plus className="size-4" />
+            Ajouter une case
+          </Button>
         </PaperSheet>
       </div>
+      {panel && editorPage ? (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) closeEditor();
+          }}
+        >
+          <DialogContent title={`Case ${caseLabel(panel, cases)}`}>
+            <CaseInspector page={editorPage} panel={panel} />
+            <Button
+              variant="danger"
+              className="mt-3 w-full"
+              onClick={() => {
+                if (!confirm("Supprimer cette case ?")) return;
+                deleteCase(editorPage.id, panel.id);
+              }}
+            >
+              Supprimer la case
+            </Button>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </AppShell>
-  );
-}
-
-function PlancheList({
-  pages,
-  onOpen,
-  onMove,
-  onDrop,
-  onDelete,
-}: {
-  pages: ReturnType<typeof filteredPages>;
-  onOpen: (id: string) => void;
-  onMove: (id: string, dir: number) => void;
-  onDrop: (from: string, to: string) => void;
-  onDelete: (id: string) => void;
-}) {
-  const seed = useStudio((s) => s.seed);
-  let last = "";
-  return (
-    <div className="flex flex-col gap-2">
-      {pages.length ? (
-        pages.map((p) => {
-          const ch = p.chapitre || "";
-          const head = ch && ch !== last;
-          last = ch;
-          const issues = checkPage(seed, p).filter((x) => x.level === "error").length;
-          const thumb = p.cases.find((c) => c.image);
-          return (
-            <div key={p.id}>
-              {head ? (
-                <div className="mt-2 mb-1 px-1 text-[10px] font-bold tracking-[0.16em] text-tab uppercase">
-                  {shortChapter(ch)}
-                </div>
-              ) : null}
-              <div
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  onDrop(e.dataTransfer.getData("text/plain"), p.id);
-                }}
-                className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-paper-line bg-paper p-2"
-                onClick={() => onOpen(p.id)}
-              >
-                <div className="relative h-[42px] w-14 shrink-0 overflow-hidden rounded-md bg-cream-2">
-                  {thumb?.image ? (
-                    <CaseImage src={thumb.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                  ) : (
-                    <span className="grid h-full w-full place-items-center text-accent/50">
-                      <span className="font-display text-xs">{padPage(p.numero)}</span>
-                    </span>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <b className="block truncate text-[13.5px]">{p.titre || "Sans titre"}</b>
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-tab">
-                    <PageStatusBadge id={p.id} />
-                    <span>
-                      {p.cases.length} case{p.cases.length > 1 ? "s" : ""}
-                    </span>
-                    {issues ? <span className="text-danger">{issues} alerte{issues > 1 ? "s" : ""}</span> : null}
-                  </div>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="grid size-10 place-items-center rounded-full text-tab hover:bg-cream-2"
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label="Actions"
-                    >
-                      <MoreHorizontal className="size-4" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent onClick={(event) => event.stopPropagation()}>
-                    <DropdownMenuItem onSelect={() => onOpen(p.id)}>Ouvrir</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onMove(p.id, -1)}>Monter</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => onMove(p.id, 1)}>Descendre</DropdownMenuItem>
-                    <DropdownMenuItem
-                      onSelect={() => {
-                        void printStoryboard(useStudio.getState().seed, p.id);
-                      }}
-                    >
-                      Imprimer
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      danger
-                      onSelect={() => {
-                        if (confirm("Supprimer cette planche ?")) onDelete(p.id);
-                      }}
-                    >
-                      Supprimer
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          );
-        })
-      ) : (
-        <div className="rounded-xl border border-dashed border-paper-line px-4 py-10 text-center text-sm text-paper-muted">
-          Aucune planche pour ce filtre.
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FileLine({
-  title,
-  st,
-  action,
-  onClick,
-}: {
-  title: string;
-  st: string;
-  action: string;
-  onClick: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-xl border border-paper-line bg-paper px-3 py-2.5 text-xs">
-      <div className="min-w-0 flex-1">
-        <b className="block">{title}</b>
-        <span className="text-[10.5px] text-subtle">{st}</span>
-      </div>
-      <button
-        type="button"
-        className="rounded-full border border-paper-line bg-cream px-3 py-2 text-[11px] font-bold"
-        onClick={onClick}
-      >
-        {action}
-      </button>
-    </div>
   );
 }

@@ -57,6 +57,10 @@ export interface PanelCase {
   statut: CaseStatus | string;
   layout_size?: { width: number; height: number };
   gardien_override?: Partial<Record<GuardianId, GuardianState>>;
+  /** Derived 1-based index. Display only — position is the array order. */
+  ordre?: number;
+  /** Manuscript planche this case was migrated from. Not a visual page. */
+  planche_id?: string;
 }
 
 export interface Planche {
@@ -121,6 +125,8 @@ export interface Seed {
   regles_editoriales: EditorialRule[];
   avant_propos?: Record<string, unknown>;
   choix_editoriaux_ouverts: EditorialChoice[];
+  /** Persisted narrative order. Visual planches are computed from this list. */
+  cases?: PanelCase[];
   planches: Planche[];
 }
 
@@ -156,7 +162,6 @@ export interface CoherenceIssue {
 }
 
 export interface VisualItem {
-  p: Planche;
   c: PanelCase;
   row: number;
   col: number;
