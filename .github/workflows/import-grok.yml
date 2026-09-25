@@ -1,6 +1,9 @@
 name: Import Grok final workspace
 
 on:
+  push:
+    branches:
+      - ux-sequence-globale
   workflow_dispatch:
 
 permissions:
