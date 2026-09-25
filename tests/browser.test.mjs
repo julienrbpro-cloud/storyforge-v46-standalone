@@ -64,6 +64,7 @@ try {
     assert.equal(saved.planches.every((p) => p.cases.length === 0), true);
     assert.equal(Object.hasOwn(saved.cases[0], "numero"), false);
     await page.getByRole("link", { name: /Planche 01/ }).click();
+    await page.locator(".visual-grid > div").first().waitFor();
     assert.equal(await page.locator(".visual-grid > div").count(), 1);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.deepEqual(errors, []);
