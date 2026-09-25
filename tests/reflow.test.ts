@@ -42,16 +42,35 @@ test("12-cell pages never overlap or reorder cases across the whole story", () =
   assert.ok(verify(seed).length > 2);
 });
 
-test("the first free cell is the only anchor; never search later holes", () => {
-  const seed = story([[1, 1], [1, 1], [3, 3], [1, 1]]);
-  const pages = verify(seed);
-  assert.deepEqual(pages[0].items.map(({ c }) => c.id), ["test-1", "test-2"]);
-  assert.deepEqual([pages[1].items[0].row, pages[1].items[0].col], [0, 0]);
-  const gap = story([[2, 1], [2, 1]]);
-  assert.equal(verify(gap).length, 2); // A free column exists, but the second 2×1 must start there.
+test("two 2×1 cases wrap onto the next row of the same 3×4 page", () => {
+  const pages = verify(story([[2, 1], [2, 1]]));
+  assert.equal(pages.length, 1);
+  assert.deepEqual(pages[0].items.map(({ row, col }) => [row, col]), [[0, 0], [1, 0]]);
 });
 
-test("3×4 goes to the next page when it cannot fit at the first free cell", () => {
+test("mixed 1×1, 2×1 and 3×1 widths keep the next valid reading position", () => {
+  const pages = verify(story([[1, 1], [2, 1], [3, 1], [1, 1]]));
+  assert.deepEqual(pages[0].items.map(({ row, col }) => [row, col]), [[0, 0], [0, 1], [1, 0], [2, 0]]);
+});
+
+test("2×2 continues on the next row after a partly filled line", () => {
+  const pages = verify(story([[2, 1], [2, 2]]));
+  assert.equal(pages.length, 1);
+  assert.deepEqual([pages[0].items[1].row, pages[0].items[1].col], [1, 0]);
+});
+
+test("skipped old holes stay empty even when a later small case would fit", () => {
+  const seed = story([[2, 1], [2, 1], [3, 1], [1, 1]]);
+  const pages = verify(seed);
+  assert.deepEqual(pages[0].items.map(({ row, col }) => [row, col]), [[0, 0], [1, 0], [2, 0], [3, 0]]);
+  assert.equal(pages[0].occupied[2], false);
+  assert.equal(pages[0].occupied[5], false);
+});
+
+test("3×3 wraps within a page, but 3×4 goes to the next when no space remains", () => {
+  const within = verify(story([[1, 1], [1, 1], [3, 3]]));
+  assert.equal(within.length, 1);
+  assert.deepEqual([within[0].items[2].row, within[0].items[2].col], [1, 0]);
   const seed = story([[1, 1], [3, 4], [1, 1]]);
   const pages = verify(seed);
   assert.equal(pages[0].items.length, 1);

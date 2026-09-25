@@ -1,6 +1,7 @@
 import { GUARDIANS } from "./constants";
 import { SEED_OFFICIEL, typeInfo } from "./seed";
 import { choiceFor, effectiveGuardian } from "./coherence";
+import { computeVisualPages, visualPageForCase } from "./visual-layout";
 import type { PanelCase, Planche, Seed } from "./types";
 
 export function relevantRules(seed: Seed, c: PanelCase) {
@@ -23,6 +24,7 @@ export function relevantRules(seed: Seed, c: PanelCase) {
 }
 
 export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
+  const visualPage = visualPageForCase(computeVisualPages(seed), c.id);
   const choice = choiceFor(seed, p, c);
   const states = GUARDIANS.map(([gid, label]) => {
     const s = effectiveGuardian(p, c, gid);
@@ -44,7 +46,7 @@ export function buildPrompt(seed: Seed, p: Planche, c: PanelCase) {
     .join("\n\n");
   return `CRÉATION D’UNE CASE DE BANDE DESSINÉE — ${seed.projet.titre} ${seed.projet.version}
 
-Planche ${p.numero} — ${p.titre}
+Planche visuelle ${visualPage >= 0 ? visualPage + 1 : "?"}
 Case ${c.numero}${c.titre ? " — " + c.titre : ""}
 
 MISE EN IMAGE

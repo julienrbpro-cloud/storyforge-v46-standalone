@@ -477,7 +477,9 @@ export const useStudio = create<StudioState>((set, get) => {
       const seed = get().seed;
       const cases = orderedCases(seed);
       const anchor = cases.find((c) => c.id === afterCaseOrSourceId);
-      const source = pageOf(seed, anchor?.source_planche_id || afterCaseOrSourceId || "") || seed.planches[0];
+      const previous = anchor || cases.at(-1);
+      const source = pageOf(seed, anchor?.source_planche_id || afterCaseOrSourceId || "")
+        || pageOf(seed, previous?.source_planche_id || "") || seed.planches.at(-1);
       const p = source || (() => {
         const id = uid("P");
         const created = { id, numero: 1, titre: "Source du projet", chapitre: null, date_histoire: null,
@@ -503,6 +505,10 @@ export const useStudio = create<StudioState>((set, get) => {
         notes: null,
         source_verbatim: null,
         statut: "a_valider",
+        gardien_override: {
+          archiviste: { present: false, niveau: null },
+          armurier: { present: false, niveau: null },
+        },
       };
       const sourceLast = [...cases].reverse().find((item) => item.source_planche_id === p.id);
       const after = anchor || (afterCaseOrSourceId ? sourceLast : undefined);

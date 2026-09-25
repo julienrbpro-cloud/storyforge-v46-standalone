@@ -200,7 +200,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
           <div className="grid grid-cols-2 gap-2">
             {GUARDIANS.map(([gid, label]) => {
               const o = panel.gardien_override?.[gid];
-              const value = o == null ? "inherit" : o.present === false ? "absent" : String(o.niveau);
+              const value = o?.present ? String(o.niveau) : "absent";
               return (
                 <label key={gid} className="text-[11px] font-extrabold text-paper-muted">
                   {seed.gardiens.find((g) => g.id === gid)?.nom || label}
@@ -209,7 +209,6 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
                     value={value}
                     onChange={(e) => setGuardian(page.id, panel.id, gid, e.target.value)}
                   >
-                    <option value="inherit">Hérite de la planche</option>
                     <option value="absent">Absent</option>
                     {[0, 1, 2, 3, 4, 5].map((n) => (
                       <option key={n} value={String(n)}>
@@ -375,7 +374,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
         </div>
       </details>
       <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
-        <DialogContent title={`Prompt · P${page.numero} case ${panel.numero}`}>
+        <DialogContent title={`Prompt · Case ${panel.numero}`}>
           <textarea
             readOnly
             spellCheck={false}

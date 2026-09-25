@@ -94,6 +94,53 @@ jobs:
           STORYFORGE_TEST_OUTPUT: ${{ runner.temp }}/storyforge-production
         run: npm run test:browser
 
+      - name: Verify exported ZIPs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import zipfile
+
+          roots = [
+              pathlib.Path("${{ runner.temp }}/storyforge-dev"),
+              pathlib.Path("${{ runner.temp }}/storyforge-production"),
+          ]
+          checked = 0
+          for root in roots:
+              for archive in sorted(root.glob("project-*.zip")):
+                  checked += 1
+                  with zipfile.ZipFile(archive) as z:
+                      bad = z.testzip()
+                      if bad:
+                          raise SystemExit(f"{archive}: CRC invalide dans {bad}")
+                      names = set(z.namelist())
+                      required = {"storyforge-v46-seed-travail.json", "storyforge-v46-session.json", "integration-manifest.json"}
+                      if missing := required - names:
+                          raise SystemExit(f"{archive}: fichiers manquants {sorted(missing)}")
+                      seed = json.loads(z.read("storyforge-v46-seed-travail.json"))
+                      session = json.loads(z.read("storyforge-v46-session.json"))
+                      manifest = json.loads(z.read("integration-manifest.json"))["files"]
+                      cases = seed["cases"]
+                      if len(cases) != 153 or len({c["id"] for c in cases}) != 153:
+                          raise SystemExit(f"{archive}: la séquence globale de 153 cases est incomplète")
+                      if cases[0]["description"] != "Case mobile à déplacer" or cases[0]["layout_size"] != {"width": 3, "height": 4}:
+                          raise SystemExit(f"{archive}: déplacement ou taille perdus")
+                      if any(p.get("cases") for p in seed["planches"]):
+                          raise SystemExit(f"{archive}: cases dupliquées dans les planches sources")
+                      refs = {c["id"]: c["image"] for c in cases if c.get("image")}
+                      assets = {f["case_id"]: f["target"] for f in manifest if f.get("case_id")}
+                      if len(refs) != 5 or refs != assets or any(ref.startswith("idb://") or ref[2:] not in names for ref in refs.values()):
+                          raise SystemExit(f"{archive}: images de cases non portables")
+                      if len(session.get("media", [])) != 1 or not session["media"][0]["data"].startswith("data:image/png;base64,"):
+                          raise SystemExit(f"{archive}: image locale absente de la sauvegarde")
+                      if session["seed"]["cases"][0]["id"] != cases[0]["id"]:
+                          raise SystemExit(f"{archive}: ordre divergent entre seed et sauvegarde")
+                  print(f"ZIP OK: {archive}")
+          if checked != 4:
+              raise SystemExit(f"Attendu 4 ZIP (2 tailles × 2 builds), trouvé {checked}")
+          PY
+
       - name: Stop compiled preview
         if: always()
         shell: bash

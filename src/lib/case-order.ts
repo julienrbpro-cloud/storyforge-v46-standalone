@@ -13,7 +13,7 @@ export function attachSourceGroups(seed: Seed) {
   for (const p of seed.planches) p.cases = [];
   for (const c of orderedCases(seed)) {
     const source = seed.planches.find((p) => p.id === c.source_planche_id);
-    (source || seed.planches[0])?.cases.push(c);
+    source?.cases.push(c);
   }
   renumberCases(seed);
 }

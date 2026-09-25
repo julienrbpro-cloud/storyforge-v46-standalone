@@ -1,5 +1,6 @@
 import { clone } from "./seed";
 import { persistedSeed } from "./case-order";
+import { computeVisualPages } from "./visual-layout";
 import { activeProjectMedia, dbAll, imageExt } from "./media";
 import type { Meta, Seed } from "./types";
 import { createSession } from "./session";
@@ -151,8 +152,8 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
     target: string;
     name: string | null;
   }> = [];
-  for (const p of portable.planches || []) {
-    for (const c of p.cases || []) {
+  for (const [pageIndex, page] of computeVisualPages(portable).entries()) {
+    for (const { c } of page.items) {
       if (!c.image) continue;
       const source = c.image;
       let rec;
@@ -165,7 +166,7 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
         rec = { blob, mime: blob.type, name: source.split("/").pop() };
       }
       if (!rec?.blob) throw new Error(`Image IndexedDB introuvable : ${c.id}`);
-      let path = exportAssetPath(p.numero, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
+      let path = exportAssetPath(pageIndex + 1, c.numero, c.id, rec.mime || rec.blob.type, rec.name);
       if (entries.some((e) => e.name === path)) path = path.replace(/(\.[^.]+)$/, `-${manifest.length}$1`);
       entries.push({ name: path, data: await rec.blob.arrayBuffer() });
       manifest.push({ case_id: c.id, owner_type: "case", owner_id: c.id, source: String(c.image), target: "./" + path, name: rec.name || null });

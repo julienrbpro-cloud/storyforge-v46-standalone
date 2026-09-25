@@ -39,7 +39,6 @@ export function SearchDialog() {
           });
         }
         if (cases.length >= 8) break;
-      if (cases.length >= 8) break;
     }
     const people = peopleOf(seed).filter((p) => p.nom.toLowerCase().includes(query));
     return { cases, people };

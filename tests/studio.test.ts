@@ -9,6 +9,8 @@ import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
 import { orderedCases, persistedSeed } from "../src/lib/case-order";
 import { checkPage, choiceFor, effectiveGuardian } from "../src/lib/coherence";
+import { buildPrompt } from "../src/lib/prompt";
+import { buildProjectZip } from "../src/lib/export-zip";
 
 const storage = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", {
@@ -175,6 +177,65 @@ test("a new large case can move ahead of Case 1 and survive a session round trip
   assert.equal(restored.cases?.[0].id, id);
   assert.equal(restored.cases?.[0].description, "Une nouvelle scène");
   assert.equal(computeVisualPages(restored)[0].items[0].c.id, id);
+});
+
+test("a case appended to the story owns neutral guardian states and a computed visual page", () => {
+  const s = fresh();
+  const id = s.addCase();
+  const seed = useStudio.getState().seed;
+  const c = orderedCases(seed).at(-1)!;
+  assert.equal(c.id, id);
+  assert.equal(c.source_planche_id, "P29"); // Compatibility provenance, never a visual placement.
+  assert.deepEqual(c.gardien_override?.archiviste, { present: false, niveau: null });
+  assert.deepEqual(c.gardien_override?.armurier, { present: false, niveau: null });
+  assert.deepEqual(effectiveGuardian(seed.planches.at(-1)!, c, "armurier"), { present: false, niveau: null });
+  const visual = computeVisualPages(seed);
+  const item = visual.flatMap((p) => p.items).find((x) => x.c.id === id)!;
+  const prompt = buildPrompt(seed, item.p, c);
+  assert.match(prompt, new RegExp(`Planche visuelle ${visual.findIndex((p) => p.items.includes(item)) + 1}`));
+  assert.doesNotMatch(prompt, /Planche 1 —|présent, niveau 1/);
+  assert.equal(choiceFor(seed, item.p, c), undefined);
+});
+
+test("historical guardian defaults become case-owned without losing overrides", () => {
+  const seed = normalizeSeed(SEED_OFFICIEL);
+  const c = seed.planches.at(-1)!.cases[0];
+  const before = structuredClone(c.gardien_override);
+  seed.planches.at(-1)!.gardien_etat.armurier = { present: false, niveau: null };
+  assert.deepEqual(c.gardien_override, before);
+  assert.deepEqual(effectiveGuardian(seed.planches[0], c, "armurier"), before?.armurier);
+  const restored = parseSeed(persistedSeed(seed));
+  assert.deepEqual(restored.cases?.find((item) => item.id === c.id)?.gardien_override, before);
+});
+
+test("ZIP exports the single root case collection and its local image", async () => {
+  const seed = normalizeSeed({ ...structuredClone(SEED_OFFICIEL), planches: [], cases: [] });
+  const c = structuredClone(normalizeSeed(SEED_OFFICIEL).cases![0]);
+  c.image = "idb://zip-image";
+  seed.cases = [c];
+  await dbReplace([{ id: "zip-image", ownerType: "case", ownerId: c.id, blob: new Blob(["zip-proof"], { type: "image/png" }) }]);
+  const bytes = new Uint8Array(await (await buildProjectZip(seed, emptyMeta(), {})).arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  const files = new Map<string, Uint8Array>();
+  let offset = 0;
+  while (view.getUint32(offset, true) === 0x04034b50) {
+    const size = view.getUint32(offset + 18, true);
+    const nameSize = view.getUint16(offset + 26, true);
+    const extraSize = view.getUint16(offset + 28, true);
+    const name = new TextDecoder().decode(bytes.slice(offset + 30, offset + 30 + nameSize));
+    const start = offset + 30 + nameSize + extraSize;
+    files.set(name, bytes.slice(start, start + size));
+    offset = start + size;
+  }
+  const json = (name: string) => JSON.parse(new TextDecoder().decode(files.get(name)));
+  const exported = json("storyforge-v46-seed-travail.json");
+  assert.equal(exported.cases.length, 1);
+  assert.equal(exported.cases[0].id, c.id);
+  assert.equal(exported.cases[0].image, "./assets/bd/p01/c01.png");
+  assert.equal(json("storyforge-v46-session.json").media.length, 1);
+  assert.equal(json("integration-manifest.json").files[0].case_id, c.id);
+  assert.equal(new TextDecoder().decode(files.get("assets/bd/p01/c01.png")), "zip-proof");
+  await dbReplace([]);
 });
 
 test("backup round trip preserves images, text, notes, status and restores actual binary data", async () => {

@@ -8,11 +8,16 @@ export function effectiveGuardian(p: Planche, c: PanelCase, gid: GuardianId) {
 }
 
 export function choiceFor(seed: Seed, p: Planche, c: PanelCase) {
+  void p;
   const canonical = SEED_OFFICIEL.planches.find((page) => page.cases.some((panel) => panel.id === c.id));
   const canonicalCase = canonical?.cases.find((panel) => panel.id === c.id);
+  const source = seed.planches.find((page) => page.id === c.source_planche_id);
+  const historicalNumber = canonicalCase?.numero ?? c.numero_source;
+  const historicalPage = canonical?.numero ?? source?.numero;
   return (
     (seed.choix_editoriaux_ouverts || []).find(
-      (x) => String(x.planche) === String(canonical?.numero ?? p.numero) && String(x.case) === String(canonicalCase?.numero ?? c.numero),
+      (x) => historicalNumber != null && historicalPage != null &&
+        String(x.planche) === String(historicalPage) && String(x.case) === String(historicalNumber),
     ) ||
     (seed.choix_editoriaux_ouverts || []).find(
       (x) => c.id?.includes("P16-2A") && x.id === "P16-C2A-VERBATIM",

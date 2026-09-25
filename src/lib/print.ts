@@ -2,6 +2,7 @@ import { resolveImageRef } from "./media";
 import { typeInfo } from "./seed";
 import type { Overlay, PanelCase, Seed } from "./types";
 import { toast } from "sonner";
+import { computeVisualPages, visualPageForCase } from "./visual-layout";
 
 function overlayText(c: PanelCase, o: Overlay) {
   if (o.text_ref) return c.textes.find((t) => t.id === o.text_ref)?.contenu || "";
@@ -19,11 +20,17 @@ function escapeHtml(v: unknown) {
 
 export async function printStoryboard(seed: Seed, plancheId: string | null) {
   try {
-    const pages = plancheId ? seed.planches.filter((p) => p.id === plancheId) : seed.planches;
+    const visual = computeVisualPages(seed);
+    const source = seed.planches.find((p) => p.id === plancheId);
+    const selectedIndex = plancheId && source
+      ? visualPageForCase(visual, source.cases[0]?.id || "")
+      : plancheId ? Number(plancheId) - 1 : -1;
+    const pages = plancheId ? visual.filter((_, index) => index === selectedIndex) : visual;
     const blocks: string[] = [];
-    for (const p of pages) {
+    for (const page of pages) {
+      const pageNumber = visual.indexOf(page) + 1;
       const cases: string[] = [];
-      for (const c of p.cases || []) {
+      for (const { c } of page.items) {
         const img = await resolveImageRef(c.image);
         const overlays = (c.overlays || [])
           .map((o) => {
@@ -43,7 +50,7 @@ export async function printStoryboard(seed: Seed, plancheId: string | null) {
         );
       }
       blocks.push(
-        `<div style="page-break-after:always;margin-bottom:24px"><h2 style="font-size:17px;margin:0 0 2px;border-bottom:2px solid #111;padding-bottom:4px">Planche ${escapeHtml(String(p.numero))} — ${escapeHtml(p.titre)}</h2><div style="font-size:11px;color:#555;margin:4px 0 10px">${escapeHtml(p.chapitre || "")}${p.date_histoire ? " · " + escapeHtml(p.date_histoire) : ""}</div>${p.instructions_planche ? `<p><b>Instructions :</b> ${escapeHtml(p.instructions_planche)}</p>` : ""}${cases.join("")}</div>`,
+        `<div style="page-break-after:always;margin-bottom:24px"><h2 style="font-size:17px;margin:0 0 2px;border-bottom:2px solid #111;padding-bottom:4px">Planche visuelle ${pageNumber}</h2>${cases.join("")}</div>`,
       );
     }
     const root = document.getElementById("print-root");

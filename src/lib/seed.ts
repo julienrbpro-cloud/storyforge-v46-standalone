@@ -63,7 +63,12 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       c.numero ??= String(ci + 1);
       if (!Array.isArray(input?.cases) && c.numero_source == null) c.numero_source = String(c.numero);
       c.source_planche_id ||= SEED_OFFICIEL.planches.find((p) => p.cases.some((x) => x.id === c.id))?.id
-        || legacyGroups.get(c.id) || SEED.planches[0]?.id;
+        || legacyGroups.get(c.id);
+      // Resolve historical page defaults onto the case once; subsequent moves cannot change them.
+      const historical = SEED.planches.find((p) => p.id === c.source_planche_id);
+      c.gardien_override ||= {};
+      for (const gid of ["archiviste", "armurier"] as const)
+        c.gardien_override[gid] ||= clone(historical?.gardien_etat[gid] || { present: false, niveau: null });
       c.description ||= "";
       if (!Object.prototype.hasOwnProperty.call(c, "image")) {
         const canonical = SEED_OFFICIEL.planches
@@ -247,7 +252,7 @@ export function caseById(seed: Seed, pid: string, cid: string) {
 
 export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase } | null {
   const c = orderedCases(seed).find((x) => x.id === cid);
-  const p = seed.planches.find((page) => page.id === c?.source_planche_id) || seed.planches[0];
+  const p = seed.planches.find((page) => page.id === c?.source_planche_id);
   return c && p ? { p, c } : null;
 }
 
