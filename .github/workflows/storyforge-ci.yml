@@ -3,10 +3,10 @@ name: StoryForge CI
 on:
   push:
     branches:
-      - fix/storyforge-reliability
+      - main
   pull_request:
     branches:
-      - grok-app
+      - main
   workflow_dispatch:
 
 permissions:
@@ -124,23 +124,26 @@ jobs:
                       missing = required - names
                       if missing:
                           raise SystemExit(f"{archive}: fichiers manquants: {sorted(missing)}")
-                      p01 = [n for n in names if n.startswith("assets/bd/p01/")]
-                      if len(p01) != 4:
-                          raise SystemExit(f"{archive}: attendu 4 images P01, trouvé {len(p01)}: {p01}")
                       session = json.loads(z.read("storyforge-v46-session.json"))
                       if len(session.get("media", [])) != 1:
                           raise SystemExit(f"{archive}: média de session importé absent")
                       if not session["media"][0].get("data", "").startswith("data:image/png;base64,"):
                           raise SystemExit(f"{archive}: média de session non portable")
                       seed = json.loads(z.read("storyforge-v46-seed-travail.json"))
-                      refs = [
-                          c.get("image")
-                          for p in seed.get("planches", [])
-                          for c in p.get("cases", [])
-                          if c.get("image")
-                      ]
+                      cases = seed.get("cases")
+                      if not isinstance(cases, list) or not cases:
+                          raise SystemExit(f"{archive}: seed.cases absent")
+                      refs = [c.get("image") for c in cases if isinstance(c, dict) and c.get("image")]
                       if any(str(ref).startswith("idb://") for ref in refs):
-                          raise SystemExit(f"{archive}: référence idb:// restante dans le seed exporté")
+                          raise SystemExit(f"{archive}: référence idb:// restante dans seed.cases")
+                      if any(n.startswith("assets/bd/p00") or n.startswith("assets/bd/p01") for n in names):
+                          raise SystemExit(f"{archive}: faux dossier p00/p01")
+                      for ref in refs:
+                          if not str(ref).startswith("./"):
+                              raise SystemExit(f"{archive}: image non portable {ref}")
+                          rel = str(ref)[2:]
+                          if rel not in names:
+                              raise SystemExit(f"{archive}: fichier manquant {rel}")
                   print(f"ZIP OK: {archive}")
           if checked != 4:
               raise SystemExit(f"Attendu 4 ZIP (2 tailles × 2 builds), trouvé {checked}")
