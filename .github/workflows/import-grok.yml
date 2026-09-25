@@ -1,9 +1,6 @@
 name: Import Grok final workspace
 
 on:
-  push:
-    branches:
-      - ux-sequence-globale
   workflow_dispatch:
 
 permissions:
@@ -23,7 +20,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .grok-import/patch.part1 .grok-import/patch.part2 .grok-import/patch.part3 .grok-import/patch.part4 > /tmp/grok.patch.b64
+          cat             .grok-import/patch.part1             .grok-import/p2.1             .grok-import/p2.2             .grok-import/p2.3a             .grok-import/p2.3b             .grok-import/p2.4             .grok-import/p3.1             .grok-import/p3.2             .grok-import/p3.3             .grok-import/p3.4a             .grok-import/p3.4b             .grok-import/patch.part4 > /tmp/grok.patch.b64
+          echo "b54188ad14acb5c79fba240ed8d456da72f04d68ecb67e9ef6804f9ba158bb4f  /tmp/grok.patch.b64" | sha256sum -c -
           base64 -d /tmp/grok.patch.b64 | gzip -d > /tmp/grok.patch
           git apply --index --binary /tmp/grok.patch
           git rm -r .grok-import
