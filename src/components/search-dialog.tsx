@@ -5,7 +5,8 @@ import { Dialog } from "@/components/ui/dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useStudio } from "@/lib/store";
 import { peopleOf } from "@/lib/seed";
-import { cn } from "@/lib/utils";
+import { orderedCases } from "@/lib/case-order";
+import { computeVisualPages, visualPageForCase } from "@/lib/visual-layout";
 
 export function SearchDialog() {
   const open = useStudio((s) => s.searchOpen);
@@ -21,42 +22,37 @@ export function SearchDialog() {
     void revision;
     if (!query) {
       return {
-        planches: seed.planches.slice(0, 6),
-        cases: [] as Array<{ pid: string; titre: string; cid: string; numero: string; text: string }>,
+        cases: [] as Array<{ cid: string; numero: string; text: string }>,
         people: peopleOf(seed).slice(0, 6),
       };
     }
-    const planches = seed.planches.filter((p) =>
-      [p.numero, p.titre, p.chapitre, p.instructions_planche].join(" ").toLowerCase().includes(query),
-    );
-    const cases: Array<{ pid: string; titre: string; cid: string; numero: string; text: string }> = [];
-    for (const p of seed.planches) {
-      for (const c of p.cases) {
+    const cases: Array<{ cid: string; numero: string; text: string }> = [];
+    for (const c of orderedCases(seed)) {
         const hay = [c.numero, c.titre, c.description, ...(c.textes || []).map((t) => t.contenu)]
           .join(" ")
           .toLowerCase();
         if (hay.includes(query)) {
           cases.push({
-            pid: p.id,
-            titre: p.titre,
             cid: c.id,
             numero: c.numero,
             text: (c.titre || c.description || "").slice(0, 90),
           });
         }
         if (cases.length >= 8) break;
-      }
       if (cases.length >= 8) break;
     }
     const people = peopleOf(seed).filter((p) => p.nom.toLowerCase().includes(query));
-    return { planches: planches.slice(0, 8), cases, people };
+    return { cases, people };
   }, [query, seed, revision]);
 
-  function goPlanche(id: string, cid?: string) {
+  function goCase(cid: string) {
     setOpen(false);
     setQ("");
-    void navigate({ to: "/planche/$plancheId", params: { plancheId: id } });
-    if (cid) useStudio.getState().setSelectedCase(cid);
+    const index = visualPageForCase(computeVisualPages(seed), cid);
+    if (index >= 0) {
+      void navigate({ to: "/planche/$plancheId", params: { plancheId: String(index + 1) } });
+      useStudio.getState().setSelectedCase(cid);
+    }
   }
 
   return (
@@ -71,36 +67,15 @@ export function SearchDialog() {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Planche, case, personnage…"
+              placeholder="Case, personnage…"
               className="h-12 w-full bg-transparent text-base text-cream outline-none placeholder:text-subtle"
             />
           </div>
           <div className="max-h-[55vh] overflow-auto p-2">
-            {!results.planches.length && !results.cases.length && !results.people.length ? (
+            {!results.cases.length && !results.people.length ? (
               <p className="px-3 py-8 text-center text-sm text-muted">Aucun résultat.</p>
             ) : (
               <>
-                {results.planches.length ? (
-                  <Group title="Planches">
-                    {results.planches.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={cn(
-                          "flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-panel-2",
-                        )}
-                        onClick={() => goPlanche(p.id)}
-                      >
-                        <span className="font-display text-accent tabular-nums">
-                          {String(p.numero).padStart(2, "0")}
-                        </span>
-                        <span className="min-w-0">
-                          <b className="block truncate text-sm">{p.titre}</b>
-                        </span>
-                      </button>
-                    ))}
-                  </Group>
-                ) : null}
                 {results.cases.length ? (
                   <Group title="Cases">
                     {results.cases.map((c) => (
@@ -108,10 +83,10 @@ export function SearchDialog() {
                         key={c.cid}
                         type="button"
                         className="flex w-full flex-col rounded-xl px-3 py-2.5 text-left hover:bg-panel-2"
-                        onClick={() => goPlanche(c.pid, c.cid)}
+                        onClick={() => goCase(c.cid)}
                       >
                         <b className="text-sm">
-                          {c.titre} · case {c.numero}
+                          Case {c.numero}
                         </b>
                         <span className="line-clamp-2 text-[11px] text-muted">{c.text}</span>
                       </button>

@@ -29,8 +29,8 @@ export function CaseCard({
       )}
     >
       <div className="relative min-h-0 flex-1 overflow-hidden bg-cream-2">
-        {panel.overlays.length ? <OverlayCanvas panel={panel} editable={false} imageFit="contain" className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : panel.image ? (
-          <CaseImage src={panel.image} alt="" className="absolute inset-0 h-full w-full object-contain" />
+        {panel.overlays.length ? <OverlayCanvas panel={panel} editable={false} imageFit="cover" className="absolute inset-0 h-full min-h-0 w-full rounded-none border-0" /> : panel.image ? (
+          <CaseImage src={panel.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-subtle">
             <ImagePlus className="size-7 opacity-50" strokeWidth={1.5} />

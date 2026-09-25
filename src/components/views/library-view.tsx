@@ -10,6 +10,7 @@ import { OFFICIAL_REFS } from "@/lib/constants";
 import { allIssues } from "@/lib/coherence";
 import { pickImage } from "@/lib/files";
 import { useStudio } from "@/lib/store";
+import { computeVisualPages, visualPageForCase } from "@/lib/visual-layout";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -252,7 +253,7 @@ function CoherencePanel() {
                 x.level === "warn" && "border-accent/40 bg-chip text-chip-fg",
               )}
               onClick={() =>
-                x.pageId && void navigate({ to: "/planche/$plancheId", params: { plancheId: x.pageId } })
+                x.pageId && void navigate({ to: "/planche/$plancheId", params: { plancheId: String(Math.max(1, visualPageForCase(computeVisualPages(seed), seed.planches.find((p) => p.id === x.pageId)?.cases[0]?.id || "") + 1)) } })
               }
             >
               <b className="mb-0.5 block">

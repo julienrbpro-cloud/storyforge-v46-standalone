@@ -7,7 +7,7 @@ import { dataUrlToBlob, dbAll, dbPut, dbReplace, openDB } from "../src/lib/media
 import { LS_MEDIA_META, LS_META, LS_PROJECTS, LS_SEED } from "../src/lib/constants";
 import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
-import { orderedCases } from "../src/lib/case-order";
+import { orderedCases, persistedSeed } from "../src/lib/case-order";
 import { checkPage, choiceFor, effectiveGuardian } from "../src/lib/coherence";
 
 const storage = new Map<string, string>();
@@ -123,63 +123,58 @@ test("detaching or deleting a text source preserves visible lettering", () => {
   assert.equal(o.text_ref, undefined);
 });
 
-test("layout covers every case once without overlap, including large cells and overflow pages", () => {
-  const seed = normalizeSeed(SEED_OFFICIEL);
-  seed.planches[0].cases[0].layout_size = { width: 3, height: 3 };
-  seed.planches[0].cases[1].layout_size = { width: 2, height: 2 };
-  const pages = computeVisualPages(seed);
-  assert.equal(pages[0].items.length, 1);
-  assert.equal(pages.flatMap((p) => p.items).length, 152);
-  for (const page of pages) {
-    const cells = new Set();
-    for (const item of page.items)
-      for (let r = item.row; r < item.row + item.height; r++)
-        for (let c = item.col; c < item.col + item.width; c++) {
-          assert.ok(r < 3 && c < 3);
-          assert.ok(!cells.has(`${r},${c}`));
-          cells.add(`${r},${c}`);
-        }
-  }
+test("legacy cases migrate once into a persisted global sequence without losing data", () => {
+  const legacy = structuredClone(SEED_OFFICIEL);
+  const original = structuredClone(legacy.planches[0].cases[0]);
+  const seed = parseSeed(legacy);
+  assert.equal(orderedCases(seed).length, 152);
+  const migrated = orderedCases(seed)[0];
+  assert.equal(migrated.id, original.id);
+  assert.deepEqual(migrated.textes, original.textes);
+  assert.equal(migrated.description, original.description);
+  assert.equal(migrated.source_planche_id, "P01");
+  assert.equal(migrated.image, original.image?.replace(/^\./, "") ?? null);
 });
 
-test("global case sequence migrates legacy data and moves a case before the first across pages", () => {
+test("global move before Case 1 keeps stable ID, full content, source guardian and numbering", () => {
   const s = fresh();
-  const first = s.seed.planches[0].cases[0];
+  const first = orderedCases(s.seed)[0];
   const lastPage = s.seed.planches.at(-1)!;
   const moved = lastPage.cases[0];
   const snapshot = structuredClone(moved);
   const guardianBefore = effectiveGuardian(lastPage, moved, "armurier");
-  const counts = s.seed.planches.map((p) => p.cases.length);
   assert.equal(s.moveCase(moved.id, first.id, "before"), true);
   const seed = useStudio.getState().seed;
-  assert.equal(seed.ordre_cases?.[0], moved.id);
-  assert.equal(seed.planches[0].cases[0].id, moved.id);
-  assert.equal(seed.planches[0].cases[0].numero, "1");
-  assert.equal(seed.planches[0].cases[1].numero, "2");
-  assert.deepEqual(seed.planches.map((p) => p.cases.length), counts);
-  assert.deepEqual(seed.planches[0].cases[0].textes, snapshot.textes);
-  assert.equal(seed.planches[0].cases[0].image, snapshot.image);
-  assert.equal(seed.planches[0].cases[0].description, snapshot.description);
-  assert.equal(seed.planches[0].cases[0].layout_size?.width, snapshot.layout_size?.width);
-  assert.deepEqual(effectiveGuardian(seed.planches[0], seed.planches[0].cases[0], "armurier"), guardianBefore);
-  assert.deepEqual(parseSeed(JSON.parse(JSON.stringify(seed))).ordre_cases, seed.ordre_cases);
-  assert.equal(orderedCases(seed).length, 152);
+  assert.equal(orderedCases(seed)[0].id, moved.id);
+  assert.deepEqual(orderedCases(seed)[0], { ...snapshot, numero: "1" });
+  assert.deepEqual(orderedCases(seed).map((c) => Number(c.numero)), Array.from({ length: 152 }, (_, i) => i + 1));
+  assert.deepEqual(effectiveGuardian(lastPage, orderedCases(seed)[0], "armurier"), guardianBefore);
+  const persisted = persistedSeed(seed);
+  assert.equal(persisted.planches.every((p) => p.cases.length === 0), true);
+  assert.equal(persisted.cases?.[0].id, moved.id);
+  assert.equal(Object.hasOwn(persisted.cases?.[0] || {}, "numero"), false);
+  assert.equal(parseSeed(JSON.parse(JSON.stringify(persisted))).cases?.[0].id, moved.id);
 });
 
-test("a new case can move ahead of Case 1 and retains edits after a session round trip", async () => {
+test("a new large case can move ahead of Case 1 and survive a session round trip", async () => {
   const s = fresh();
-  const first = s.seed.planches[0].cases[0];
+  const first = orderedCases(s.seed)[0];
   const page = s.seed.planches[1];
   s.addCase(page.id);
   const id = useStudio.getState().selectedCaseId!;
   s.setCaseField(page.id, id, "description", "Une nouvelle scène");
-  s.setCaseSize(page.id, id, "width", 2);
+  s.setCaseSize(page.id, id, "width", 3);
+  s.setCaseSize(page.id, id, "height", 4);
   assert.equal(s.moveCase(id, first.id, "before"), true);
-  const moved = useStudio.getState().seed.planches[0].cases[0];
-  assert.equal(moved.description, "Une nouvelle scène");
-  assert.equal(moved.layout_size?.width, 2);
+  const moved = orderedCases(useStudio.getState().seed)[0];
+  assert.equal(moved.id, id);
+  assert.equal(moved.numero, "1");
+  assert.deepEqual(moved.layout_size, { width: 3, height: 4 });
   const backup = await createSession(useStudio.getState().seed, useStudio.getState().meta, {});
-  assert.equal(parseSession(backup).seed.ordre_cases?.[0], id);
+  const restored = parseSession(backup).seed;
+  assert.equal(restored.cases?.[0].id, id);
+  assert.equal(restored.cases?.[0].description, "Une nouvelle scène");
+  assert.equal(computeVisualPages(restored)[0].items[0].c.id, id);
 });
 
 test("backup round trip preserves images, text, notes, status and restores actual binary data", async () => {

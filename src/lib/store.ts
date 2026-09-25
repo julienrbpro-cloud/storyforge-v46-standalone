@@ -13,7 +13,7 @@ import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIE
 import { dbAll, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
-import { moveCase as reorderCase, syncCaseOrder } from "./case-order";
+import { attachSourceGroups, moveCase as reorderCase, orderedCases, persistedSeed } from "./case-order";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
 import type {
   Filters,
@@ -79,7 +79,7 @@ interface StudioState {
   setOverlay: (pid: string, cid: string, oid: string, patch: Partial<Overlay>, bump?: boolean) => void;
   setOverlayTextRef: (pid: string, cid: string, oid: string, ref: string) => void;
   removeOverlay: (pid: string, cid: string, oid: string) => void;
-  addCase: (pid: string) => void;
+  addCase: (afterCaseOrSourceId?: string) => string;
   moveCase: (sourceId: string, targetId: string, side: "before" | "after") => boolean;
   addPlanche: () => string;
   addProject: (title: string) => boolean;
@@ -102,7 +102,8 @@ function pageOf(seed: Seed, pid: string) {
   return seed.planches.find((p) => p.id === pid);
 }
 function caseOf(seed: Seed, pid: string, cid: string) {
-  return pageOf(seed, pid)?.cases.find((c) => c.id === cid);
+  void pid;
+  return orderedCases(seed).find((c) => c.id === cid);
 }
 
 function readLocal<T>(key: string, fallback: T): T {
@@ -116,7 +117,7 @@ function readLocal<T>(key: string, fallback: T): T {
 }
 
 function saveLocalSnapshot(seed: Seed, meta: Meta, mediaMeta: Record<string, unknown[]>) {
-  const values = [[LS_SEED, JSON.stringify(seed)], [LS_META, JSON.stringify(meta)],
+  const values = [[LS_SEED, JSON.stringify(persistedSeed(seed))], [LS_META, JSON.stringify(meta)],
     [LS_MEDIA_META, JSON.stringify(mediaMeta)]];
   const previous = values.map(([key]) => [key, localStorage.getItem(key)]);
   try {
@@ -210,7 +211,7 @@ export const useStudio = create<StudioState>((set, get) => {
         const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
         const projects = archive?.projects?.length ? archive.projects : [];
         const activeId = get().activeProjectId;
-        const record = { id: activeId, seed, meta, mediaMeta };
+        const record = { id: activeId, seed: persistedSeed(seed), meta, mediaMeta };
         const index = projects.findIndex((p) => p.id === activeId);
         if (index >= 0) projects[index] = record;
         else projects.push(record);
@@ -320,7 +321,7 @@ export const useStudio = create<StudioState>((set, get) => {
       };
       c.layout_size = {
         width: Math.min(3, Math.max(1, next.width)),
-        height: Math.min(3, Math.max(1, next.height)),
+        height: Math.min(4, Math.max(1, next.height)),
       };
       bump();
     },
@@ -472,16 +473,27 @@ export const useStudio = create<StudioState>((set, get) => {
       bump();
     },
 
-    addCase(pid) {
-      const p = pageOf(get().seed, pid);
-      if (!p) return;
-      const n = p.cases.length + 1;
-      const id = uid(p.id + "-case");
-      p.cases.push({
+    addCase(afterCaseOrSourceId) {
+      const seed = get().seed;
+      const cases = orderedCases(seed);
+      const anchor = cases.find((c) => c.id === afterCaseOrSourceId);
+      const source = pageOf(seed, anchor?.source_planche_id || afterCaseOrSourceId || "") || seed.planches[0];
+      const p = source || (() => {
+        const id = uid("P");
+        const created = { id, numero: 1, titre: "Source du projet", chapitre: null, date_histoire: null,
+          gardien_etat: { archiviste: { present: false, niveau: null }, armurier: { present: false, niveau: null } },
+          instructions_planche: null, notes_planche: [], cases: [] } as Seed["planches"][number];
+        seed.planches.push(created);
+        seed.projet.nombre_planches = seed.planches.length;
+        return created;
+      })();
+      const id = uid("case");
+      const c = {
         id,
+        source_planche_id: p.id,
         image: null,
         overlays: [],
-        numero: String(n),
+        numero: String(cases.length + 1),
         titre: null,
         type_unite: "case",
         source_label: "Case locale",
@@ -491,18 +503,14 @@ export const useStudio = create<StudioState>((set, get) => {
         notes: null,
         source_verbatim: null,
         statut: "a_valider",
-      });
-      // Insert at this page's boundary in the one global story order.
-      const seed = get().seed;
-      const newId = id;
-      const prior = p.cases[n - 2]?.id;
-      const nextPage = seed.planches.slice(seed.planches.indexOf(p) + 1).find((page) => page.cases.length);
-      const ids = seed.ordre_cases || (seed.ordre_cases = []);
-      const at = prior ? ids.indexOf(prior) + 1 : nextPage ? ids.indexOf(nextPage.cases[0].id) : ids.length;
-      ids.splice(Math.max(0, at), 0, newId);
-      syncCaseOrder(seed);
+      };
+      const sourceLast = [...cases].reverse().find((item) => item.source_planche_id === p.id);
+      const after = anchor || (afterCaseOrSourceId ? sourceLast : undefined);
+      cases.splice(after ? cases.indexOf(after) + 1 : cases.length, 0, c);
+      attachSourceGroups(seed);
       set({ selectedCaseId: id });
       bump();
+      return id;
     },
 
     moveCase(sourceId, targetId, side) {
@@ -550,7 +558,7 @@ export const useStudio = create<StudioState>((set, get) => {
       const snapshot = captureRawLocalSnapshot();
       try {
         saveLocalSnapshot(seed, meta, mediaMeta);
-        localStorage.setItem(LS_PROJECTS, JSON.stringify({ activeId: id, projects: [...archive.projects, { id, seed, meta, mediaMeta }] }));
+        localStorage.setItem(LS_PROJECTS, JSON.stringify({ activeId: id, projects: [...archive.projects, { id, seed: persistedSeed(seed), meta, mediaMeta }] }));
       } catch {
         try { restoreRawLocalSnapshot(snapshot); } catch { /* Original snapshot remains in the archive. */ }
         toast.error("Impossible d’enregistrer le nouveau projet");
@@ -583,8 +591,8 @@ export const useStudio = create<StudioState>((set, get) => {
 
     deletePlanche(id) {
       const seed = get().seed;
+      if (pageOf(seed, id)?.cases.length) return;
       seed.planches = seed.planches.filter((p) => p.id !== id);
-      syncCaseOrder(seed);
       seed.projet.nombre_planches = seed.planches.length;
       seed.planches.forEach((p, i) => {
         p.numero = i + 1;
@@ -597,11 +605,14 @@ export const useStudio = create<StudioState>((set, get) => {
     },
 
     deleteCase(pid, cid) {
-      const p = pageOf(get().seed, pid);
-      if (!p) return;
-      p.cases = p.cases.filter((c) => c.id !== cid);
-      syncCaseOrder(get().seed);
-      if (get().selectedCaseId === cid) set({ selectedCaseId: p.cases[0]?.id ?? null });
+      const seed = get().seed;
+      const cases = orderedCases(seed);
+      const i = cases.findIndex((c) => c.id === cid);
+      if (i < 0) return;
+      cases.splice(i, 1);
+      attachSourceGroups(seed);
+      if (get().selectedCaseId === cid) set({ selectedCaseId: null });
+      void pid;
       bump();
     },
 
@@ -614,8 +625,6 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((p, idx) => {
         p.numero = idx + 1;
       });
-      get().seed.ordre_cases = arr.flatMap((p) => p.cases.map((c) => c.id));
-      syncCaseOrder(get().seed);
       bump();
     },
 
@@ -630,22 +639,14 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((page, idx) => {
         page.numero = idx + 1;
       });
-      get().seed.ordre_cases = arr.flatMap((p) => p.cases.map((c) => c.id));
-      syncCaseOrder(get().seed);
       bump();
     },
 
     async replaceCaseImage(cid, file) {
-      const entry = (() => {
-        for (const p of get().seed.planches) {
-          const c = p.cases.find((x) => x.id === cid);
-          if (c) return { p, c };
-        }
-        return null;
-      })();
-      if (!entry) return;
+      const c = orderedCases(get().seed).find((x) => x.id === cid);
+      if (!c) return;
       const ref = await putCaseImage(cid, file);
-      entry.c.image = ref;
+      c.image = ref;
       bump();
       toast.success("Image enregistrée");
     },
@@ -669,9 +670,7 @@ export const useStudio = create<StudioState>((set, get) => {
       const images = new Map<string, string>();
       const personImages = new Map<string, string>();
       const guardianImages = new Map<string, string>();
-      for (const p of current.planches) {
-        for (const c of p.cases) if (c.image) images.set(c.id, c.image);
-      }
+      for (const c of orderedCases(current)) if (c.image) images.set(c.id, c.image);
       for (const person of current.personnages || []) {
         if (person.image) personImages.set(person.id, person.image);
       }

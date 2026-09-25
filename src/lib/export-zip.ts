@@ -1,4 +1,5 @@
 import { clone } from "./seed";
+import { persistedSeed } from "./case-order";
 import { activeProjectMedia, dbAll, imageExt } from "./media";
 import type { Meta, Seed } from "./types";
 import { createSession } from "./session";
@@ -107,7 +108,8 @@ export function downloadBlob(blob: Blob, name: string) {
 }
 
 export function downloadJson(data: unknown, name: string) {
-  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }), name);
+  const payload = data && typeof data === "object" && "planches" in data ? persistedSeed(data as Seed) : data;
+  downloadBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), name);
 }
 
 function exportAssetPath(
@@ -227,7 +229,7 @@ export async function buildProjectZip(seed: Seed, meta: Meta, mediaMeta: unknown
   }
   const exportedAt = new Date().toISOString();
   entries.unshift(
-    { name: "storyforge-v46-seed-travail.json", data: enc.encode(JSON.stringify(portable, null, 2)) },
+    { name: "storyforge-v46-seed-travail.json", data: enc.encode(JSON.stringify(persistedSeed(portable), null, 2)) },
     {
       name: "storyforge-v46-session.json",
       data: enc.encode(

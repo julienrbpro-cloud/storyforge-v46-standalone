@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useStudio } from "@/lib/store";
+import { computeVisualPages } from "@/lib/visual-layout";
 
 export function StudioProvider({ children }: { children: ReactNode }) {
   const ready = useStudio((s) => s.ready);
@@ -40,14 +41,14 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       if (e.key !== "j" && e.key !== "k") return;
       if (!pathname.startsWith("/planche/")) return;
       const id = pathname.split("/planche/")[1];
-      const i = seed.planches.findIndex((p) => p.id === id);
-      if (i < 0) return;
-      const next = e.key === "j" ? seed.planches[i + 1] : seed.planches[i - 1];
-      if (next) void navigate({ to: "/planche/$plancheId", params: { plancheId: next.id } });
+      const pages = computeVisualPages(seed);
+      const i = Number(id) - 1;
+      const next = i + (e.key === "j" ? 1 : -1);
+      if (next >= 0 && next < pages.length) void navigate({ to: "/planche/$plancheId", params: { plancheId: String(next + 1) } });
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, pathname, seed.planches]);
+  }, [navigate, pathname, seed]);
 
   if (!ready && pathname !== "/") {
     return (

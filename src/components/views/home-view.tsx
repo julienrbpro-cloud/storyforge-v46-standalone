@@ -1,20 +1,18 @@
 import { useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
-import { ProgressBar } from "@/components/progress-bar";
 import { useStudio } from "@/lib/store";
 import { totalCases } from "@/lib/seed";
-import { progressOf } from "@/lib/project";
+import { computeVisualPages } from "@/lib/visual-layout";
 
 export function HomeView() {
   const projects = useStudio((s) => s.projects);
   const activeProjectId = useStudio((s) => s.activeProjectId);
   const openProject = useStudio((s) => s.openProject);
   const seed = useStudio((s) => s.seed);
-  const meta = useStudio((s) => s.meta);
   const revision = useStudio((s) => s.revision);
   const navigate = useNavigate();
   void revision;
-  const progress = progressOf(seed, meta);
+  const visualCount = computeVisualPages(seed).length;
   return <AppShell title={<h1 className="font-display text-2xl">Projets</h1>} showPlus>
     <main className="view-enter grid gap-4 p-4 sm:grid-cols-2">
       {projects.map((project) => <button key={project.id} type="button"
@@ -26,8 +24,7 @@ export function HomeView() {
         </div>
         <div className="p-4">
           <h2 className="font-display text-xl">{project.title}</h2>
-          {project.id === activeProjectId ? <><ProgressBar value={progress.pct} className="my-3" />
-            <p className="text-xs text-muted">{progress.label} · {totalCases(seed)} cases</p></>
+          {project.id === activeProjectId ? <p className="mt-2 text-xs text-muted">{visualCount} planches visuelles · {totalCases(seed)} cases</p>
             : <p className="mt-2 text-xs text-muted">Ouvrir le projet →</p>}
         </div>
       </button>)}

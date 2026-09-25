@@ -2,7 +2,7 @@ import officialJson from "@/data/seed.json";
 import { uid, clamp } from "./utils";
 import type { Overlay, PanelCase, Planche, Seed, Meta } from "./types";
 import { z } from "zod";
-import { syncCaseOrder } from "./case-order";
+import { attachSourceGroups, orderedCases } from "./case-order";
 
 export const SEED_OFFICIEL = officialJson as Seed;
 
@@ -39,6 +39,7 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
   SEED.regles_editoriales ||= clone(SEED_OFFICIEL.regles_editoriales);
   SEED.choix_editoriaux_ouverts ||= clone(SEED_OFFICIEL.choix_editoriaux_ouverts);
   SEED.planches ||= [];
+  const legacyGroups = new Map<string, string>();
   SEED.planches.forEach((p, pi) => {
     p.id ||= uid("P");
     p.numero ??= pi + 1;
@@ -48,13 +49,25 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       armurier: p.gardien_etat?.armurier || { present: false, niveau: null },
     };
     p.cases ||= [];
-    p.cases.forEach((c, ci) => {
+    for (const c of p.cases) legacyGroups.set(c.id, p.id);
+  });
+  const legacy = SEED.planches.flatMap((p) => p.cases);
+  const byId = new Map(legacy.map((c) => [c.id, c]));
+  const oldOrder = SEED.ordre_cases || [];
+  const orderedLegacy = oldOrder.length
+    ? [...oldOrder.map((id) => byId.get(id)).filter((c): c is PanelCase => Boolean(c)), ...legacy.filter((c) => !oldOrder.includes(c.id))]
+    : legacy;
+  SEED.cases = Array.isArray(input?.cases) ? clone(input.cases) : orderedLegacy;
+  SEED.cases.forEach((c, ci) => {
       c.id ||= uid("case");
       c.numero ??= String(ci + 1);
+      if (!Array.isArray(input?.cases) && c.numero_source == null) c.numero_source = String(c.numero);
+      c.source_planche_id ||= SEED_OFFICIEL.planches.find((p) => p.cases.some((x) => x.id === c.id))?.id
+        || legacyGroups.get(c.id) || SEED.planches[0]?.id;
       c.description ||= "";
       if (!Object.prototype.hasOwnProperty.call(c, "image")) {
         const canonical = SEED_OFFICIEL.planches
-          .find((x) => x.id === p.id)
+          .find((x) => x.id === c.source_planche_id)
           ?.cases.find((x) => x.id === c.id);
         c.image = publicAsset(canonical?.image ?? null);
       } else {
@@ -80,10 +93,10 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
         o.font_size = clamp(Number(o.font_size ?? 0.045), 0.02, 0.12);
         o.align ||= "center";
       });
-    });
   });
   SEED.projet.nombre_planches = SEED.planches.length;
-  syncCaseOrder(SEED);
+  delete SEED.ordre_cases;
+  attachSourceGroups(SEED);
   return SEED;
 }
 
@@ -115,6 +128,11 @@ const seedSchema = z
       )
       .optional(),
     ordre_cases: z.array(z.string()).optional(),
+    cases: z.array(z.object({
+      id: z.string().min(1),
+      textes: z.array(z.object({ id: z.string().optional(), type: z.string(), contenu: z.string() }).passthrough()).optional(),
+      overlays: z.array(z.object({ id: z.string().optional(), type: z.enum(["text", "speech"]).optional() }).passthrough()).optional(),
+    }).passthrough()).optional(),
     planches: z.array(
       z
         .object({
@@ -191,15 +209,13 @@ export function parseSeed(data: unknown): Seed {
   if (!result.success)
     throw new Error("Structure du seed invalide : " + result.error.issues[0].path.join("."));
   const raw = result.data as unknown as Seed;
-  const caseIds = raw.planches.flatMap((p) => p.cases || []).map((c) => c.id).filter(Boolean);
+  const caseIds = (raw.cases || raw.planches.flatMap((p) => p.cases || [])).map((c) => c.id).filter(Boolean);
   if (new Set(caseIds).size !== caseIds.length) throw new Error("Identifiant de case dupliqué");
   const seed = normalizeSeed(raw);
   const ids = new Set<string>();
-  for (const p of seed.planches) {
-    for (const item of [p, ...p.cases, ...p.cases.flatMap((c) => [...c.textes, ...c.overlays])]) {
+  for (const item of [...seed.planches, ...orderedCases(seed), ...orderedCases(seed).flatMap((c) => [...c.textes, ...c.overlays])]) {
       if (ids.has(item.id)) throw new Error(`Identifiant dupliqué : ${item.id}`);
       ids.add(item.id);
-    }
   }
   return seed;
 }
@@ -225,15 +241,14 @@ export function pageById(seed: Seed, id: string) {
 }
 
 export function caseById(seed: Seed, pid: string, cid: string) {
-  return pageById(seed, pid)?.cases.find((c) => c.id === cid);
+  void pid;
+  return orderedCases(seed).find((c) => c.id === cid);
 }
 
 export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase } | null {
-  for (const p of seed.planches) {
-    const c = p.cases.find((x) => x.id === cid);
-    if (c) return { p, c };
-  }
-  return null;
+  const c = orderedCases(seed).find((x) => x.id === cid);
+  const p = seed.planches.find((page) => page.id === c?.source_planche_id) || seed.planches[0];
+  return c && p ? { p, c } : null;
 }
 
 export function emptyFilters() {
@@ -245,16 +260,15 @@ export function emptyMeta(): Meta {
 }
 
 export function totalCases(seed: Seed) {
-  return seed.planches.reduce((n, p) => n + p.cases.length, 0);
+  return orderedCases(seed).length;
 }
 
 export function caseImageCount(seed: Seed) {
-  return seed.planches.flatMap((p) => p.cases).filter((c) => c.image).length;
+  return orderedCases(seed).filter((c) => c.image).length;
 }
 
 export function idbImageCount(seed: Seed) {
-  return seed.planches
-    .flatMap((p) => p.cases)
+  return orderedCases(seed)
     .filter((c) => String(c.image || "").startsWith("idb://")).length;
 }
 

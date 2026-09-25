@@ -1,4 +1,5 @@
 import type { Meta, PageStatus, PanelCase, Planche, Seed } from "./types";
+import { orderedCases } from "./case-order";
 
 export const PROJECT_GENRES = "Drame intime · Récit autobiographique · Fantastique social";
 
@@ -66,5 +67,5 @@ export function chapterProgress(seed: Seed, meta: Meta, chapter: string) {
 }
 
 export function importCount(seed: Seed) {
-  return seed.planches.flatMap((p) => p.cases).filter((c) => c.image).length;
+  return orderedCases(seed).filter((c) => c.image).length;
 }

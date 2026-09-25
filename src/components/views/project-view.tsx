@@ -1,33 +1,24 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal, Plus, Search } from "lucide-react";
+import { ArrowLeft, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PaperSheet } from "@/components/paper-sheet";
-import { ProgressBar } from "@/components/progress-bar";
-import { PageStatusBadge } from "@/components/status-badge";
 import { CaseImage } from "@/components/case-image";
 import { CaseOrderPanel } from "@/components/case-order-panel";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { checkPage } from "@/lib/coherence";
-import { filteredPages, useStudio } from "@/lib/store";
-import { printStoryboard } from "@/lib/print";
-import { progressOf, PROJECT_GENRES } from "@/lib/project";
+import { useStudio } from "@/lib/store";
+import { computeVisualPages, visualPageForCase } from "@/lib/visual-layout";
+import { PROJECT_GENRES } from "@/lib/project";
 import { padPage } from "@/lib/utils";
 
 export function ProjectView() {
   const seed = useStudio((s) => s.seed);
   const activeProjectId = useStudio((s) => s.activeProjectId);
-  const meta = useStudio((s) => s.meta);
   const revision = useStudio((s) => s.revision);
-  const addPlanche = useStudio((s) => s.addPlanche);
-  const movePage = useStudio((s) => s.movePage);
-  const dropPage = useStudio((s) => s.dropPage);
-  const deletePlanche = useStudio((s) => s.deletePlanche);
+  const addCase = useStudio((s) => s.addCase);
   const setSearchOpen = useStudio((s) => s.setSearchOpen);
   const navigate = useNavigate();
   void revision;
-  const pages = filteredPages(seed, meta);
-  const prog = progressOf(seed, meta);
+  const pages = computeVisualPages(seed);
   return <AppShell back={<Link to="/" className="grid size-10 place-items-center text-cream" aria-label="Retour aux projets"><ArrowLeft className="size-5" /></Link>}
     title={<span className="sr-only">{seed.projet.titre}</span>}
     actions={<Button variant="secondary" size="icon" title="Rechercher" onClick={() => setSearchOpen(true)}><Search className="size-4" /></Button>}>
@@ -42,20 +33,20 @@ export function ProjectView() {
         <Link to="/donnees" className="rounded-lg border border-line bg-panel px-3 py-2.5 text-xs font-semibold">Exporter</Link>
       </div>
       <PaperSheet>
-        <div className="mb-3 flex items-center gap-2.5"><ProgressBar value={prog.pct} track="paper" className="flex-1" /><span className="whitespace-nowrap text-xs font-bold text-chip-fg">{prog.label}</span></div>
-        <div className="flex flex-col gap-2">{pages.map((p) => {
-          const issues = checkPage(seed, p).filter((x) => x.level === "error").length;
-          const thumb = p.cases.find((c) => c.image);
-          return <div key={p.id} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", p.id)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); dropPage(e.dataTransfer.getData("text/plain"), p.id); }}
-            className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-paper-line bg-paper p-2" onClick={() => void navigate({ to: "/planche/$plancheId", params: { plancheId: p.id } })}>
-            <div className="relative h-[42px] w-14 shrink-0 overflow-hidden rounded-md bg-cream-2">{thumb?.image ? <CaseImage src={thumb.image} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <span className="grid h-full w-full place-items-center font-display text-xs text-accent/50">{padPage(p.numero)}</span>}</div>
-            <div className="min-w-0 flex-1"><b className="block truncate text-[13.5px]">{p.titre || "Sans titre"}</b><div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-tab"><PageStatusBadge id={p.id} /><span>{p.cases.length} case{p.cases.length > 1 ? "s" : ""}</span>{issues ? <span className="text-danger">{issues} alerte{issues > 1 ? "s" : ""}</span> : null}</div></div>
-            <DropdownMenu><DropdownMenuTrigger asChild><button type="button" className="grid size-10 place-items-center rounded-full text-tab" onClick={(e) => e.stopPropagation()} aria-label="Actions"><MoreHorizontal className="size-4" /></button></DropdownMenuTrigger><DropdownMenuContent onClick={(e) => e.stopPropagation()}>
-              <DropdownMenuItem onSelect={() => void navigate({ to: "/planche/$plancheId", params: { plancheId: p.id } })}>Ouvrir</DropdownMenuItem><DropdownMenuItem onSelect={() => movePage(p.id, -1)}>Monter</DropdownMenuItem><DropdownMenuItem onSelect={() => movePage(p.id, 1)}>Descendre</DropdownMenuItem><DropdownMenuItem onSelect={() => void printStoryboard(useStudio.getState().seed, p.id)}>Imprimer</DropdownMenuItem><DropdownMenuSeparator /><DropdownMenuItem danger onSelect={() => { if (confirm("Supprimer cette planche et ses cases ?")) deletePlanche(p.id); }}>Supprimer</DropdownMenuItem>
-            </DropdownMenuContent></DropdownMenu>
-          </div>;
-        })}{!pages.length ? <p className="py-10 text-center text-sm text-paper-muted">Aucune planche pour ce filtre.</p> : null}</div>
-        <Button className="mt-3 w-full" onClick={() => { const id = addPlanche(); void navigate({ to: "/planche/$plancheId", params: { plancheId: id } }); }}><Plus className="size-4" />Nouvelle planche</Button>
+        <h2 className="mb-3 font-display text-lg">Planches visuelles · {pages.length}</h2>
+        <div className="grid gap-2 sm:grid-cols-2">{pages.map((page, index) => {
+          const thumb = page.items.find(({ c }) => c.image)?.c;
+          return <Link key={index} to="/planche/$plancheId" params={{ plancheId: String(index + 1) }} className="flex min-h-20 items-center gap-3 rounded-xl border border-paper-line bg-paper p-2">
+            <div className="relative h-16 w-12 shrink-0 overflow-hidden rounded-md bg-cream-2">{thumb?.image ? <CaseImage src={thumb.image} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <span className="grid h-full w-full place-items-center font-display text-accent/50">{padPage(index + 1)}</span>}</div>
+            <div><b className="block text-sm">Planche {padPage(index + 1)}</b><span className="text-xs text-paper-muted">{page.items.length} case{page.items.length > 1 ? "s" : ""} · Cases {page.items[0]?.c.numero}–{page.items.at(-1)?.c.numero}</span></div>
+          </Link>;
+        })}</div>
+        {!pages.length ? <p className="py-8 text-center text-sm text-paper-muted">Aucune case pour l’instant.</p> : null}
+        <Button className="mt-3 w-full" onClick={() => {
+          const id = addCase();
+          const index = visualPageForCase(computeVisualPages(useStudio.getState().seed), id);
+          void navigate({ to: "/planche/$plancheId", params: { plancheId: String(index + 1) } });
+        }}><Plus className="size-4" />Ajouter une case</Button>
         <CaseOrderPanel />
       </PaperSheet>
     </div>

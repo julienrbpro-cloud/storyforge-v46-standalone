@@ -1,51 +1,44 @@
 import type { PanelCase, Seed } from "./types";
 
-/** A single story order over stable case IDs. Page arrays hold the existing display projection. */
+/** The root array is the only ordering authority. Legacy page groups are reference metadata. */
 export function orderedCases(seed: Seed): PanelCase[] {
-  const byId = new Map(seed.planches.flatMap((p) => p.cases).map((c) => [c.id, c]));
-  return (seed.ordre_cases || []).map((id) => byId.get(id)).filter((c): c is PanelCase => Boolean(c));
+  return seed.cases || [];
 }
 
-export function syncCaseOrder(seed: Seed) {
-  const cases = seed.planches.flatMap((p) => p.cases);
-  const oldPages = new Map(seed.planches.flatMap((p) => p.cases.map((c) => [c.id, p] as const)));
-  const byId = new Map(cases.map((c) => [c.id, c]));
-  const seen = new Set<string>();
-  const ids = [...(seed.ordre_cases || []), ...cases.map((c) => c.id)].filter((id) => {
-    if (!byId.has(id) || seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-  seed.ordre_cases = ids;
-  // The previous page sizes are a temporary pagination projection until the 3×4 engine ships.
-  let offset = 0;
-  for (const page of seed.planches) {
-    const count = page.cases.length;
-    page.cases = ids.slice(offset, offset + count).map((id) => byId.get(id)!);
-    for (const c of page.cases) {
-      const previous = oldPages.get(c.id);
-      if (previous && previous !== page) {
-        c.gardien_override ||= {};
-        for (const gid of ["archiviste", "armurier"] as const) {
-          c.gardien_override[gid] ??= { ...previous.gardien_etat[gid] };
-        }
-      }
-    }
-    offset += count;
+export function renumberCases(seed: Seed) {
+  orderedCases(seed).forEach((c, index) => { c.numero = String(index + 1); });
+}
+
+export function attachSourceGroups(seed: Seed) {
+  for (const p of seed.planches) p.cases = [];
+  for (const c of orderedCases(seed)) {
+    const source = seed.planches.find((p) => p.id === c.source_planche_id);
+    (source || seed.planches[0])?.cases.push(c);
   }
-  seed.planches.flatMap((p) => p.cases).forEach((c, i) => {
-    if (c.numero_source === undefined && c.numero !== String(i + 1)) c.numero_source = c.numero;
-    c.numero = String(i + 1);
-  });
+  renumberCases(seed);
 }
 
 export function moveCase(seed: Seed, sourceId: string, targetId: string, side: "before" | "after") {
   if (sourceId === targetId) return false;
-  const ids = seed.ordre_cases || [];
-  const from = ids.indexOf(sourceId);
-  if (from < 0 || !ids.includes(targetId)) return false;
-  ids.splice(from, 1);
-  ids.splice(ids.indexOf(targetId) + (side === "after" ? 1 : 0), 0, sourceId);
-  syncCaseOrder(seed);
+  const cases = orderedCases(seed);
+  const from = cases.findIndex((c) => c.id === sourceId);
+  if (from < 0 || !cases.some((c) => c.id === targetId)) return false;
+  const [moved] = cases.splice(from, 1);
+  const target = cases.findIndex((c) => c.id === targetId);
+  cases.splice(target + (side === "after" ? 1 : 0), 0, moved);
+  renumberCases(seed);
   return true;
+}
+
+/** Persist root cases once. Page groups are reconstructed by source IDs on load. */
+export function persistedSeed(seed: Seed): Seed {
+  const copy = structuredClone(seed);
+  copy.planches = copy.planches.map((p) => ({ ...p, cases: [] }));
+  copy.cases = orderedCases(copy).map((c) => {
+    const { numero: _derived, ...content } = c;
+    void _derived;
+    return content as PanelCase;
+  });
+  delete copy.ordre_cases;
+  return copy;
 }

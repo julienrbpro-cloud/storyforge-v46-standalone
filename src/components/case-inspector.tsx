@@ -232,7 +232,7 @@ export function CaseInspector({ page, panel }: { page: Planche; panel: PanelCase
                   value={size[key]}
                   onChange={(e) => setSize(page.id, panel.id, key, Number(e.target.value))}
                 >
-                  {[1, 2, 3].map((n) => (
+                  {Array.from({ length: key === "height" ? 4 : 3 }, (_, i) => i + 1).map((n) => (
                     <option key={n} value={n}>
                       {n}
                     </option>

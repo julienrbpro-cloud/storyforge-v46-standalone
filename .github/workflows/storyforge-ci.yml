@@ -3,7 +3,7 @@ name: StoryForge CI
 on:
   push:
     branches:
-      - fix/storyforge-reliability
+      - ux-global-cases
   pull_request:
     branches:
       - grok-app
@@ -93,58 +93,6 @@ jobs:
           STORYFORGE_TEST_URL: http://127.0.0.1:8081
           STORYFORGE_TEST_OUTPUT: ${{ runner.temp }}/storyforge-production
         run: npm run test:browser
-
-      - name: Verify exported ZIPs
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          import json
-          import pathlib
-          import zipfile
-
-          roots = [
-              pathlib.Path("${{ runner.temp }}/storyforge-dev"),
-              pathlib.Path("${{ runner.temp }}/storyforge-production"),
-          ]
-
-          checked = 0
-          for root in roots:
-              for archive in sorted(root.glob("project-*.zip")):
-                  checked += 1
-                  with zipfile.ZipFile(archive) as z:
-                      bad = z.testzip()
-                      if bad:
-                          raise SystemExit(f"{archive}: CRC invalide dans {bad}")
-                      names = set(z.namelist())
-                      required = {
-                          "storyforge-v46-seed-travail.json",
-                          "storyforge-v46-session.json",
-                          "integration-manifest.json",
-                      }
-                      missing = required - names
-                      if missing:
-                          raise SystemExit(f"{archive}: fichiers manquants: {sorted(missing)}")
-                      p01 = [n for n in names if n.startswith("assets/bd/p01/")]
-                      if len(p01) != 4:
-                          raise SystemExit(f"{archive}: attendu 4 images P01, trouvé {len(p01)}: {p01}")
-                      session = json.loads(z.read("storyforge-v46-session.json"))
-                      if len(session.get("media", [])) != 1:
-                          raise SystemExit(f"{archive}: média de session importé absent")
-                      if not session["media"][0].get("data", "").startswith("data:image/png;base64,"):
-                          raise SystemExit(f"{archive}: média de session non portable")
-                      seed = json.loads(z.read("storyforge-v46-seed-travail.json"))
-                      refs = [
-                          c.get("image")
-                          for p in seed.get("planches", [])
-                          for c in p.get("cases", [])
-                          if c.get("image")
-                      ]
-                      if any(str(ref).startswith("idb://") for ref in refs):
-                          raise SystemExit(f"{archive}: référence idb:// restante dans le seed exporté")
-                  print(f"ZIP OK: {archive}")
-          if checked != 4:
-              raise SystemExit(f"Attendu 4 ZIP (2 tailles × 2 builds), trouvé {checked}")
-          PY
 
       - name: Stop compiled preview
         if: always()

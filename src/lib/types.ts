@@ -43,6 +43,8 @@ export interface CaseText {
 
 export interface PanelCase {
   id: string;
+  /** Legacy source metadata; never used to place a case on a visual page. */
+  source_planche_id?: string;
   image?: string | null;
   overlays: Overlay[];
   numero: string;
@@ -123,7 +125,9 @@ export interface Seed {
   regles_editoriales: EditorialRule[];
   avant_propos?: Record<string, unknown>;
   choix_editoriaux_ouverts: EditorialChoice[];
-  /** Story order; page case arrays are the current display projection. */
+  /** Sole persisted ordered collection of case content. */
+  cases?: PanelCase[];
+  /** Accepted only while migrating saves made by the previous version. */
   ordre_cases?: string[];
   planches: Planche[];
 }

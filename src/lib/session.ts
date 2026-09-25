@@ -3,6 +3,7 @@ import { activeProjectMedia, blobToDataUrl, dataUrlToBlob, dbAll, type MediaReco
 import { clone, normalizeMeta, parseSeed } from "./seed";
 import { APP_VERSION } from "./constants";
 import type { Meta, Seed } from "./types";
+import { orderedCases, persistedSeed } from "./case-order";
 
 const sessionSchema = z.object({
   seed: z.unknown().refine((x) => x != null, "Seed manquant"),
@@ -32,7 +33,7 @@ export async function createSession(
   records?: MediaRecord[],
 ) {
   // Snapshot before asynchronous file reads, so typing during export cannot mix revisions.
-  const snapshot = { seed: clone(seed), meta: clone(meta), media_meta: clone(mediaMeta) };
+  const snapshot = { seed: persistedSeed(seed), meta: clone(meta), media_meta: clone(mediaMeta) };
   const media = await Promise.all(
     activeProjectMedia(records ?? (await dbAll()), seed).map(async ({ blob, ...record }) => ({
       ...record,
@@ -61,8 +62,7 @@ export function parseSession(data: unknown) {
     records.set(record.id, { ...record, blob: dataUrlToBlob(encoded) });
   }
   // Legacy standalone backups stored images by case id.
-  for (const p of seed.planches)
-    for (const c of p.cases) {
+  for (const c of orderedCases(seed)) {
       const legacy = d.images?.[c.id];
       if (legacy) {
         const id = `legacy-${c.id}`;
@@ -72,7 +72,7 @@ export function parseSession(data: unknown) {
       if (c.image?.startsWith("idb://") && !records.has(c.image.slice(6))) {
         throw new Error(`La sauvegarde ne contient pas l’image de ${c.id}. Rien n’a été remplacé.`);
       }
-    }
+  }
   for (const entity of [...(seed.personnages || []), ...(seed.gardiens || [])]) {
     if (entity.image?.startsWith("idb://") && !records.has(entity.image.slice(6))) {
       throw new Error(`La sauvegarde ne contient pas l’image de référence de ${entity.id}. Rien n’a été remplacé.`);
