@@ -1,0 +1,37 @@
+name: Import Grok final workspace
+
+on:
+  push:
+    branches:
+      - ux-sequence-globale
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ux-sequence-globale
+          fetch-depth: 0
+
+      - name: Apply verified Grok snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .grok-import/patch.part1 .grok-import/patch.part2 .grok-import/patch.part3 .grok-import/patch.part4 > /tmp/grok.patch.b64
+          base64 -d /tmp/grok.patch.b64 | gzip -d > /tmp/grok.patch
+          git apply --index --binary /tmp/grok.patch
+          git rm -r .grok-import
+          git rm .github/workflows/import-grok.yml
+          tree="$(git write-tree)"
+          echo "Result tree: $tree"
+          test "$tree" = "235375927245197b32e59a648f71532d2204b86f"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Import Grok global case sequence refactor"
+          git push origin HEAD:ux-sequence-globale
