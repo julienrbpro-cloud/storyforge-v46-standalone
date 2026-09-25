@@ -3,10 +3,11 @@ name: StoryForge CI
 on:
   push:
     branches:
+      - main
       - ux-global-cases
   pull_request:
     branches:
-      - grok-app
+      - main
   workflow_dispatch:
 
 permissions:

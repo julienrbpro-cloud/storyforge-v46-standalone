@@ -9,6 +9,7 @@ import { printStoryboard } from "@/lib/print";
 import { pickJson } from "@/lib/files";
 import { toast } from "sonner";
 import { createSession } from "@/lib/session";
+import { computeVisualPages } from "@/lib/visual-layout";
 
 export function DataView() {
   const seed = useStudio((s) => s.seed);
@@ -46,7 +47,7 @@ export function DataView() {
           <h5 className="mb-1 text-xs font-bold tracking-wide text-accent-2 uppercase">Manuscrit</h5>
           <p className="font-display text-lg">{seed.projet.titre}</p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-cream-2">
-            {seed.planches.length} planches · {totalCases(seed)} cases · {caseImageCount(seed)} image
+            {computeVisualPages(seed).length} planches visuelles · {totalCases(seed)} cases · {caseImageCount(seed)} image
             {caseImageCount(seed) > 1 ? "s" : ""}
             {idbImageCount(seed) ? ` dont ${idbImageCount(seed)} dans ce navigateur` : ""}.
           </p>

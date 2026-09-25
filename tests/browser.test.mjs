@@ -98,7 +98,9 @@ try {
     await page.getByRole("dialog", { name: "Case 1" }).waitFor();
     await page.getByRole("dialog", { name: "Case 1" }).getByRole("button", { name: "Fermer" }).click();
     await page.getByRole("link", { name: "Retour au projet" }).click();
+    const visualPageCount = await page.getByRole("link", { name: /^Planche \d+/ }).count();
     await page.getByRole("link", { name: "Exporter" }).click();
+    await page.getByText(`${visualPageCount} planches visuelles · 153 cases`, { exact: false }).waitFor();
     await page.evaluate(() => { window.print = () => {}; });
     await page.getByText("Storyboard complet").locator("../..").getByRole("button", { name: "Imprimer" }).click();
     await page.waitForFunction(() => document.querySelector("#print-root")?.textContent?.includes("Case mobile à déplacer"));
