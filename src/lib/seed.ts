@@ -2,6 +2,7 @@ import officialJson from "@/data/seed.json";
 import { uid, clamp } from "./utils";
 import type { Overlay, PanelCase, Planche, Seed, Meta } from "./types";
 import { z } from "zod";
+import { syncCaseOrder } from "./case-order";
 
 export const SEED_OFFICIEL = officialJson as Seed;
 
@@ -82,6 +83,7 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
     });
   });
   SEED.projet.nombre_planches = SEED.planches.length;
+  syncCaseOrder(SEED);
   return SEED;
 }
 
@@ -112,6 +114,7 @@ const seedSchema = z
           .passthrough(),
       )
       .optional(),
+    ordre_cases: z.array(z.string()).optional(),
     planches: z.array(
       z
         .object({
@@ -187,7 +190,10 @@ export function parseSeed(data: unknown): Seed {
   const result = seedSchema.safeParse(input);
   if (!result.success)
     throw new Error("Structure du seed invalide : " + result.error.issues[0].path.join("."));
-  const seed = normalizeSeed(result.data as unknown as Seed);
+  const raw = result.data as unknown as Seed;
+  const caseIds = raw.planches.flatMap((p) => p.cases || []).map((c) => c.id).filter(Boolean);
+  if (new Set(caseIds).size !== caseIds.length) throw new Error("Identifiant de case dupliqué");
+  const seed = normalizeSeed(raw);
   const ids = new Set<string>();
   for (const p of seed.planches) {
     for (const item of [p, ...p.cases, ...p.cases.flatMap((c) => [...c.textes, ...c.overlays])]) {

@@ -7,7 +7,8 @@ import { dataUrlToBlob, dbAll, dbPut, dbReplace, openDB } from "../src/lib/media
 import { LS_MEDIA_META, LS_META, LS_PROJECTS, LS_SEED } from "../src/lib/constants";
 import { parseSession, createSession } from "../src/lib/session";
 import { computeVisualPages } from "../src/lib/visual-layout";
-import { checkPage, choiceFor } from "../src/lib/coherence";
+import { orderedCases } from "../src/lib/case-order";
+import { checkPage, choiceFor, effectiveGuardian } from "../src/lib/coherence";
 
 const storage = new Map<string, string>();
 Object.defineProperty(globalThis, "localStorage", {
@@ -139,6 +140,46 @@ test("layout covers every case once without overlap, including large cells and o
           cells.add(`${r},${c}`);
         }
   }
+});
+
+test("global case sequence migrates legacy data and moves a case before the first across pages", () => {
+  const s = fresh();
+  const first = s.seed.planches[0].cases[0];
+  const lastPage = s.seed.planches.at(-1)!;
+  const moved = lastPage.cases[0];
+  const snapshot = structuredClone(moved);
+  const guardianBefore = effectiveGuardian(lastPage, moved, "armurier");
+  const counts = s.seed.planches.map((p) => p.cases.length);
+  assert.equal(s.moveCase(moved.id, first.id, "before"), true);
+  const seed = useStudio.getState().seed;
+  assert.equal(seed.ordre_cases?.[0], moved.id);
+  assert.equal(seed.planches[0].cases[0].id, moved.id);
+  assert.equal(seed.planches[0].cases[0].numero, "1");
+  assert.equal(seed.planches[0].cases[1].numero, "2");
+  assert.deepEqual(seed.planches.map((p) => p.cases.length), counts);
+  assert.deepEqual(seed.planches[0].cases[0].textes, snapshot.textes);
+  assert.equal(seed.planches[0].cases[0].image, snapshot.image);
+  assert.equal(seed.planches[0].cases[0].description, snapshot.description);
+  assert.equal(seed.planches[0].cases[0].layout_size?.width, snapshot.layout_size?.width);
+  assert.deepEqual(effectiveGuardian(seed.planches[0], seed.planches[0].cases[0], "armurier"), guardianBefore);
+  assert.deepEqual(parseSeed(JSON.parse(JSON.stringify(seed))).ordre_cases, seed.ordre_cases);
+  assert.equal(orderedCases(seed).length, 152);
+});
+
+test("a new case can move ahead of Case 1 and retains edits after a session round trip", async () => {
+  const s = fresh();
+  const first = s.seed.planches[0].cases[0];
+  const page = s.seed.planches[1];
+  s.addCase(page.id);
+  const id = useStudio.getState().selectedCaseId!;
+  s.setCaseField(page.id, id, "description", "Une nouvelle scène");
+  s.setCaseSize(page.id, id, "width", 2);
+  assert.equal(s.moveCase(id, first.id, "before"), true);
+  const moved = useStudio.getState().seed.planches[0].cases[0];
+  assert.equal(moved.description, "Une nouvelle scène");
+  assert.equal(moved.layout_size?.width, 2);
+  const backup = await createSession(useStudio.getState().seed, useStudio.getState().meta, {});
+  assert.equal(parseSession(backup).seed.ordre_cases?.[0], id);
 });
 
 test("backup round trip preserves images, text, notes, status and restores actual binary data", async () => {
@@ -276,7 +317,7 @@ test("case guardian overrides do not produce a false absent-page error", () => {
 test("editorial restrictions follow original case identity after page reordering", () => {
   const s = fresh(),
     p = s.seed.planches.find((p) => p.id === "P16")!;
-  const c = p.cases.find((c) => c.numero === "2A")!;
+  const c = p.cases.find((c) => c.numero_source === "2A")!;
   s.movePage(p.id, 1);
   assert.equal(choiceFor(s.seed, p, c)?.bloque_generation_du_texte, true);
 });

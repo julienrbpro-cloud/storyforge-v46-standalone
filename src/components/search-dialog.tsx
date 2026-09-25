@@ -4,7 +4,6 @@ import { Search } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useStudio } from "@/lib/store";
-import { shortChapter } from "@/lib/project";
 import { peopleOf } from "@/lib/seed";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +14,11 @@ export function SearchDialog() {
   const revision = useStudio((s) => s.revision);
   const navigate = useNavigate();
   const [q, setQ] = useState("");
-  void revision;
 
   const query = q.trim().toLowerCase();
   const results = useMemo(() => {
+    // The seed object is edited in place; revision invalidates these search results.
+    void revision;
     if (!query) {
       return {
         planches: seed.planches.slice(0, 6),
@@ -96,7 +96,6 @@ export function SearchDialog() {
                         </span>
                         <span className="min-w-0">
                           <b className="block truncate text-sm">{p.titre}</b>
-                          <span className="text-[11px] text-muted">{shortChapter(p.chapitre)}</span>
                         </span>
                       </button>
                     ))}

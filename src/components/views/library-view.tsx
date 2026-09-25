@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { CaseImage } from "@/components/case-image";
 import { PaperSheet, TabsBar } from "@/components/paper-sheet";
@@ -34,6 +34,7 @@ export function LibraryView() {
   const revision = useStudio((s) => s.revision);
   const setEntityField = useStudio((s) => s.setLibraryEntityField);
   const setRuleField = useStudio((s) => s.setEditorialRuleField);
+  const setChoiceField = useStudio((s) => s.setEditorialChoiceField);
   const replaceLibraryImage = useStudio((s) => s.replaceLibraryImage);
   const activeProjectId = useStudio((s) => s.activeProjectId);
   const addPerson = useStudio((s) => s.addLibraryPerson);
@@ -52,7 +53,7 @@ export function LibraryView() {
   }
 
   return (
-    <AppShell title={<div className="font-display text-lg">Bibliothèque</div>} showSearch>
+    <AppShell title={<div className="font-display text-lg">Personnages & règles</div>} back={<Link to="/projet" className="grid size-10 place-items-center text-cream" aria-label="Retour au projet">←</Link>}>
       <div className="view-enter flex min-h-0 flex-1 flex-col">
         <p className="px-4 pt-3 pb-1 text-sm text-muted">
           Le monde de {seed.projet.titre} — visages, règles, et ce qui doit rester cohérent.
@@ -136,6 +137,9 @@ export function LibraryView() {
                           onChange={(e) => setEntityField("gardien", guardian.id, "role", e.target.value)}
                         />
                       </Field>
+                      <Field label="Description">
+                        <Textarea value={guardian.note || ""} onChange={(e) => setEntityField("gardien", guardian.id, "note", e.target.value)} />
+                      </Field>
                       <Field label="Fonction protectrice">
                         <Textarea
                           value={guardian.fonction_protectrice || ""}
@@ -203,6 +207,11 @@ export function LibraryView() {
                 </div>
               )}
               <Button variant="paper" className="w-full" onClick={addRule}>Ajouter une règle</Button>
+              {(seed.choix_editoriaux_ouverts || []).map((choice) => <article key={choice.id} className="space-y-2 rounded-xl border border-paper-line bg-paper p-3">
+                <h3 className="text-xs font-bold">Repère éditorial · planche {choice.planche}, case {choice.case}</h3>
+                <Field label="Description"><Textarea value={choice.description || ""} onChange={(e) => setChoiceField(choice.id, "description", e.target.value)} /></Field>
+                <Field label="Règle"><Textarea value={choice.regle} onChange={(e) => setChoiceField(choice.id, "regle", e.target.value)} /></Field>
+              </article>)}
             </div>
           ) : null}
 

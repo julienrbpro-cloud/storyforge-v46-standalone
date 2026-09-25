@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Mark } from "@/components/logo";
 import { caseImageCount, idbImageCount, totalCases } from "@/lib/seed";
@@ -29,7 +30,7 @@ export function DataView() {
   }
 
   return (
-    <AppShell title={<div className="font-display text-lg">Profil</div>}>
+    <AppShell title={<div className="font-display text-lg">Exporter</div>} back={<Link to="/projet" className="grid size-10 place-items-center text-cream" aria-label="Retour au projet">←</Link>}>
       <div className="view-enter space-y-3 p-4">
         <div className="flex items-center gap-3 rounded-2xl border border-line bg-panel p-4">
           <Mark className="size-14 text-accent" />

@@ -46,6 +46,7 @@ export interface PanelCase {
   image?: string | null;
   overlays: Overlay[];
   numero: string;
+  numero_source?: string;
   titre: string | null;
   type_unite: string;
   source_label?: string;
@@ -84,6 +85,7 @@ export interface Gardien {
   nom?: string;
   personnage_id?: string;
   role?: string;
+  note?: string;
   objets_permanents?: string[];
   fonction_protectrice?: string;
   evolution?: string;
@@ -121,6 +123,8 @@ export interface Seed {
   regles_editoriales: EditorialRule[];
   avant_propos?: Record<string, unknown>;
   choix_editoriaux_ouverts: EditorialChoice[];
+  /** Story order; page case arrays are the current display projection. */
+  ordre_cases?: string[];
   planches: Planche[];
 }
 

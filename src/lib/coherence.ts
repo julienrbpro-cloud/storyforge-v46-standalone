@@ -8,7 +8,7 @@ export function effectiveGuardian(p: Planche, c: PanelCase, gid: GuardianId) {
 }
 
 export function choiceFor(seed: Seed, p: Planche, c: PanelCase) {
-  const canonical = SEED_OFFICIEL.planches.find((page) => page.id === p.id);
+  const canonical = SEED_OFFICIEL.planches.find((page) => page.cases.some((panel) => panel.id === c.id));
   const canonicalCase = canonical?.cases.find((panel) => panel.id === c.id);
   return (
     (seed.choix_editoriaux_ouverts || []).find(

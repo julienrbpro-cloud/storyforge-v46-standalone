@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BookOpen, FolderOpen, Home, Plus, Search, UserRound } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { Plus, Search } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -9,20 +9,12 @@ import { SearchDialog } from "@/components/search-dialog";
 import { cn } from "@/lib/utils";
 import { useStudio } from "@/lib/store";
 
-const NAV = [
-  { to: "/atelier" as const, icon: Home, label: "Accueil", kind: "home" },
-  { to: "/projet" as const, icon: FolderOpen, label: "Projets", kind: "projets" },
-  { to: "/bibliotheque" as const, icon: BookOpen, label: "Bibliothèque", kind: "biblio" },
-  { to: "/donnees" as const, icon: UserRound, label: "Profil", kind: "profil" },
-];
-
 export function AppShell({
   children,
   title,
   sub,
   actions,
   back,
-  hideNav = false,
   showSearch = false,
   showPlus = false,
 }: {
@@ -31,11 +23,9 @@ export function AppShell({
   sub?: string;
   actions?: ReactNode;
   back?: ReactNode;
-  hideNav?: boolean;
   showSearch?: boolean;
   showPlus?: boolean;
 }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const saveState = useStudio((s) => s.saveState);
   const setSearchOpen = useStudio((s) => s.setSearchOpen);
   const addProject = useStudio((s) => s.addProject);
@@ -75,35 +65,7 @@ export function AppShell({
           {actions}
         </div>
       </header>
-      <div className={cn("flex min-h-0 flex-1 flex-col", hideNav ? "pb-4" : "pb-[74px]")}>{children}</div>
-      {hideNav ? null : (
-        <nav className="fixed bottom-0 left-1/2 z-20 grid w-full max-w-[430px] -translate-x-1/2 grid-cols-4 border-t border-line bg-nav pb-[env(safe-area-inset-bottom)] lg:max-w-[1120px]">
-          {NAV.map((item) => {
-            const active =
-              item.kind === "home"
-                ? pathname === "/atelier"
-                : item.kind === "projets"
-                  ? pathname.startsWith("/projet") || pathname.startsWith("/planche")
-                  : item.kind === "biblio"
-                    ? pathname.startsWith("/bibliotheque")
-                    : pathname.startsWith("/donnees");
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.label}
-                to={item.to}
-                className={cn(
-                  "grid min-h-14 justify-items-center gap-1 py-2.5 text-[11px] text-muted transition-colors",
-                  active && "text-accent",
-                )}
-              >
-                <Icon className="size-4" strokeWidth={1.75} />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
+      <div className="flex min-h-0 flex-1 flex-col pb-4">{children}</div>
       <SearchDialog />
       <Dialog open={projectOpen} onOpenChange={setProjectOpen}>
         <DialogContent title="Nouveau projet">

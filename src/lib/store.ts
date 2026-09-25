@@ -13,6 +13,7 @@ import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIE
 import { dbAll, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
+import { moveCase as reorderCase, syncCaseOrder } from "./case-order";
 import { inferPageStatus, pageStatusOf as statusOf } from "./project";
 import type {
   Filters,
@@ -65,6 +66,7 @@ interface StudioState {
     value: unknown,
   ) => void;
   setEditorialRuleField: (id: string, key: "titre" | "contenu", value: string) => void;
+  setEditorialChoiceField: (id: string, key: "regle" | "description", value: string) => void;
   addLibraryPerson: () => void;
   addLibraryGuardian: () => void;
   addEditorialRule: () => void;
@@ -78,6 +80,7 @@ interface StudioState {
   setOverlayTextRef: (pid: string, cid: string, oid: string, ref: string) => void;
   removeOverlay: (pid: string, cid: string, oid: string) => void;
   addCase: (pid: string) => void;
+  moveCase: (sourceId: string, targetId: string, side: "before" | "after") => boolean;
   addPlanche: () => string;
   addProject: (title: string) => boolean;
   openProject: (id: string) => void;
@@ -340,6 +343,13 @@ export const useStudio = create<StudioState>((set, get) => {
       bump();
     },
 
+    setEditorialChoiceField(id, key, value) {
+      const choice = get().seed.choix_editoriaux_ouverts.find((x) => x.id === id);
+      if (!choice) return;
+      choice[key] = value;
+      bump();
+    },
+
     addLibraryPerson() {
       get().seed.personnages.push({ id: uid("person"), nom: "Nouveau personnage", role: "", note: "" });
       bump();
@@ -482,8 +492,23 @@ export const useStudio = create<StudioState>((set, get) => {
         source_verbatim: null,
         statut: "a_valider",
       });
+      // Insert at this page's boundary in the one global story order.
+      const seed = get().seed;
+      const newId = id;
+      const prior = p.cases[n - 2]?.id;
+      const nextPage = seed.planches.slice(seed.planches.indexOf(p) + 1).find((page) => page.cases.length);
+      const ids = seed.ordre_cases || (seed.ordre_cases = []);
+      const at = prior ? ids.indexOf(prior) + 1 : nextPage ? ids.indexOf(nextPage.cases[0].id) : ids.length;
+      ids.splice(Math.max(0, at), 0, newId);
+      syncCaseOrder(seed);
       set({ selectedCaseId: id });
       bump();
+    },
+
+    moveCase(sourceId, targetId, side) {
+      const moved = reorderCase(get().seed, sourceId, targetId, side);
+      if (moved) bump();
+      return moved;
     },
 
     addPlanche() {
@@ -543,21 +568,23 @@ export const useStudio = create<StudioState>((set, get) => {
       const archive = readLocal<ProjectArchive | null>(LS_PROJECTS, null);
       const project = archive?.projects.find((p) => p.id === id);
       if (!archive || !project) return;
+      const normalized = parseSeed(project.seed);
       const snapshot = captureRawLocalSnapshot();
       try {
-        saveLocalSnapshot(project.seed, project.meta, project.mediaMeta);
+        saveLocalSnapshot(normalized, project.meta, project.mediaMeta);
         localStorage.setItem(LS_PROJECTS, JSON.stringify({ ...archive, activeId: id }));
       } catch {
         try { restoreRawLocalSnapshot(snapshot); } catch { /* Original snapshot remains in the archive. */ }
         toast.error("Impossible d’ouvrir ce projet");
         return;
       }
-      set({ seed: project.seed, meta: project.meta, mediaMeta: project.mediaMeta, activeProjectId: id, selectedCaseId: null, revision: get().revision + 1 });
+      set({ seed: normalized, meta: project.meta, mediaMeta: project.mediaMeta, activeProjectId: id, selectedCaseId: null, revision: get().revision + 1 });
     },
 
     deletePlanche(id) {
       const seed = get().seed;
       seed.planches = seed.planches.filter((p) => p.id !== id);
+      syncCaseOrder(seed);
       seed.projet.nombre_planches = seed.planches.length;
       seed.planches.forEach((p, i) => {
         p.numero = i + 1;
@@ -573,9 +600,7 @@ export const useStudio = create<StudioState>((set, get) => {
       const p = pageOf(get().seed, pid);
       if (!p) return;
       p.cases = p.cases.filter((c) => c.id !== cid);
-      p.cases.forEach((c, i) => {
-        c.numero = String(i + 1);
-      });
+      syncCaseOrder(get().seed);
       if (get().selectedCaseId === cid) set({ selectedCaseId: p.cases[0]?.id ?? null });
       bump();
     },
@@ -589,6 +614,8 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((p, idx) => {
         p.numero = idx + 1;
       });
+      get().seed.ordre_cases = arr.flatMap((p) => p.cases.map((c) => c.id));
+      syncCaseOrder(get().seed);
       bump();
     },
 
@@ -603,6 +630,8 @@ export const useStudio = create<StudioState>((set, get) => {
       arr.forEach((page, idx) => {
         page.numero = idx + 1;
       });
+      get().seed.ordre_cases = arr.flatMap((p) => p.cases.map((c) => c.id));
+      syncCaseOrder(get().seed);
       bump();
     },
 
@@ -748,7 +777,6 @@ export function filteredPages(seed: Seed, meta: Meta) {
       .toLowerCase();
     return (
       (!q || hay.includes(q)) &&
-      (!f.chapitre || p.chapitre === f.chapitre) &&
       (!f.personnage || (p.cases || []).some((c) => (c.personnages || []).includes(f.personnage))) &&
       (!f.gardien || gs.includes(f.gardien)) &&
       (!f.statut || pageStatusOf(meta, p.id) === f.statut)

@@ -65,7 +65,6 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
 
   return (
     <AppShell
-      hideNav
       back={
         <Link to="/projet" className="grid size-10 place-items-center text-cream">
           <ArrowLeft className="size-5" />
@@ -148,10 +147,7 @@ export function PlancheView({ plancheId }: { plancheId: string }) {
               <Field label="Titre">
                 <Input value={p.titre || ""} onChange={(e) => setPageField(p.id, "titre", e.target.value)} />
               </Field>
-              <Field label="Chapitre">
-                <Input value={p.chapitre || ""} onChange={(e) => setPageField(p.id, "chapitre", e.target.value)} />
-              </Field>
-              <Field label="Date dans l’histoire">
+                            <Field label="Date dans l’histoire">
                 <Input
                   value={p.date_histoire || ""}
                   onChange={(e) => setPageField(p.id, "date_histoire", e.target.value)}
