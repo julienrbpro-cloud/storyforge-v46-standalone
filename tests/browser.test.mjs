@@ -29,7 +29,7 @@ try {
     const image = page.locator(".visual-grid img").first();
     await image.waitFor();
     assert.equal(await image.evaluate((img) => getComputedStyle(img).objectFit), "cover");
-    const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem("sf46-seed")).cases[0].id);
+    const originalId = "P01-1";
     await page.getByRole("link", { name: "Retour au projet" }).click();
     await page.getByRole("button", { name: "Ajouter une case", exact: true }).click();
     const inspector = page.getByRole("dialog", { name: /^Case \d+$/ });
@@ -38,6 +38,10 @@ try {
     await inspector.getByText("Options avancées").click();
     await inspector.getByLabel("Largeur grille").selectOption("3");
     await inspector.getByLabel("Hauteur grille").selectOption("4");
+    await page.waitForFunction(() => {
+      const saved = JSON.parse(localStorage.getItem("sf46-seed") || "null");
+      return saved?.cases?.length === 153 && saved.cases.some((c) => c.description === "Case mobile à déplacer" && c.layout_size?.height === 4);
+    });
     const id = await page.evaluate(() => JSON.parse(localStorage.getItem("sf46-seed")).cases.at(-1).id);
     await inspector.getByRole("button", { name: "Fermer" }).click();
     assert.equal(await page.locator(".visual-grid").count(), 1);
