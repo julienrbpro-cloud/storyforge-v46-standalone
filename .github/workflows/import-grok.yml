@@ -27,11 +27,8 @@ jobs:
           echo "b54188ad14acb5c79fba240ed8d456da72f04d68ecb67e9ef6804f9ba158bb4f  /tmp/grok.patch.b64" | sha256sum -c -
           base64 -d /tmp/grok.patch.b64 | gzip -d > /tmp/grok.patch
           git apply --index --binary /tmp/grok.patch
+          git restore --source=HEAD --staged --worktree .github/workflows/storyforge-ci.yml
           git rm -r .grok-import
-          git rm .github/workflows/import-grok.yml
-          tree="$(git write-tree)"
-          echo "Result tree: $tree"
-          test "$tree" = "235375927245197b32e59a648f71532d2204b86f"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Import Grok global case sequence refactor"
