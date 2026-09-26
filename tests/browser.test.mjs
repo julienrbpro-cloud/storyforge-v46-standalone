@@ -83,6 +83,11 @@ try {
     await page.getByRole("button", { name: "Planche 1", exact: true }).click();
     await page.locator(".visual-grid").waitFor();
     assert.equal(await page.locator(".visual-grid").count(), 1);
+    await page.getByRole("button", { name: "Descendre la case 1", exact: true }).click();
+    assert.equal(await page.getByRole("dialog").count(), 0);
+    await page.getByRole("button", { name: "Monter la case 2", exact: true }).click();
+    assert.equal(await page.getByRole("button", { name: "Descendre la case 1", exact: true }).count(), 1);
+    pass("case reorder controls are available directly on the visual grid");
     await page.locator(".visual-grid button").first().click();
     let orderDialog = page.getByRole("dialog", { name: "Case 1", exact: true });
     await orderDialog.getByRole("button", { name: "Descendre", exact: true }).click();
