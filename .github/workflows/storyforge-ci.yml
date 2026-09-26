@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ux-hybrid-final
   pull_request:
     branches:
       - main
