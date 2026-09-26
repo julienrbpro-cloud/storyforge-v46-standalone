@@ -523,6 +523,9 @@ export const useStudio = create<StudioState>((set, get) => {
       const index = cases.findIndex((c) => c.id === cid);
       if (index < 0) return;
       cases.splice(index, 1);
+      seed.choix_editoriaux_ouverts = (seed.choix_editoriaux_ouverts || []).filter(
+        (choice) => choice.case_id !== cid,
+      );
       syncStoryOrder(seed);
       const next = cases[Math.min(index, cases.length - 1)] || null;
       set({
