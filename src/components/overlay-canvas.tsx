@@ -1,8 +1,9 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { CaseImage } from "@/components/case-image";
 import { clamp, cn } from "@/lib/utils";
+import { caseLabel } from "@/lib/sequence";
 import { useStudio } from "@/lib/store";
-import type { Overlay, PanelCase, Planche } from "@/lib/types";
+import type { Overlay, PanelCase } from "@/lib/types";
 
 function overlayText(c: PanelCase, o: Overlay) {
   if (o.text_ref) return c.textes.find((t) => t.id === o.text_ref)?.contenu || "[Texte canonique introuvable]";
@@ -10,13 +11,11 @@ function overlayText(c: PanelCase, o: Overlay) {
 }
 
 export function OverlayCanvas({
-  page,
   panel,
   editable = true,
   className,
   imageFit = "cover",
 }: {
-  page?: Planche;
   panel: PanelCase;
   editable?: boolean;
   className?: string;
@@ -29,7 +28,7 @@ export function OverlayCanvas({
   useEffect(() => () => stopDrag.current?.(), []);
 
   function startDrag(ev: ReactPointerEvent<HTMLElement>, oid: string, mode: "move" | "resize") {
-    if (!editable || !page) return;
+    if (!editable) return;
     ev.preventDefault();
     ev.stopPropagation();
     const o = (panel.overlays || []).find((x) => x.id === oid);
@@ -44,7 +43,7 @@ export function OverlayCanvas({
       const dy = (e.clientY - sy) / rect.height;
       if (mode === "resize") {
         setOverlay(
-          page.id,
+          "",
           panel.id,
           oid,
           {
@@ -55,7 +54,7 @@ export function OverlayCanvas({
         );
       } else {
         setOverlay(
-          page.id,
+          "",
           panel.id,
           oid,
           {
@@ -88,12 +87,12 @@ export function OverlayCanvas({
       {panel.image ? (
         <CaseImage
           src={panel.image}
-          alt={`Case ${panel.numero}`}
+          alt={`Case ${caseLabel(panel)}`}
           className={cn("absolute inset-0 h-full w-full", imageFit === "contain" ? "object-contain" : "object-cover")}
         />
       ) : (
         <span className="pointer-events-none absolute inset-0 grid place-items-center font-display text-4xl text-[#c9bba0]">
-          {panel.numero}
+          {caseLabel(panel)}
         </span>
       )}
       {(panel.overlays || []).map((o) => (

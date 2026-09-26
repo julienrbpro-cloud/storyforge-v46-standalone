@@ -1,10 +1,11 @@
 import { uid } from "./utils";
 import { LS_PROJECTS } from "./constants";
 import type { Seed } from "./types";
+import { storyCases } from "./sequence";
 
 export function referencedMediaIds(seed: Seed): Set<string> {
   const refs = [
-    ...seed.planches.flatMap((p) => p.cases.map((c) => c.image)),
+    ...storyCases(seed).map((c) => c.image),
     ...seed.personnages.map((p) => p.image),
     ...seed.gardiens.map((g) => g.image),
   ];

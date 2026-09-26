@@ -1,4 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { HomeView } from "@/components/views/home-view";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createFileRoute("/atelier")({ component: HomeView });
+export const Route = createFileRoute("/atelier")({
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
+});

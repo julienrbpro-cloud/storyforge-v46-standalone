@@ -1,6 +1,8 @@
 import officialJson from "@/data/seed.json";
 import { uid, clamp } from "./utils";
+import { migrateSequence, storyCases } from "./sequence";
 import type { Overlay, PanelCase, Planche, Seed, Meta } from "./types";
+import { computeVisualPages } from "./visual-layout";
 import { z } from "zod";
 
 export const SEED_OFFICIEL = officialJson as Seed;
@@ -47,18 +49,20 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       armurier: p.gardien_etat?.armurier || { present: false, niveau: null },
     };
     p.cases ||= [];
-    p.cases.forEach((c, ci) => {
+    p.cases.forEach((c, index) => {
       c.id ||= uid("case");
-      c.numero ??= String(ci + 1);
+      c.numero ??= String(index + 1);
+    });
+  });
+  migrateSequence(SEED);
+  if (Array.isArray(SEED.cases)) {
+    SEED.cases.forEach((c) => {
+      c.id ||= uid("case");
+      c.numero ??= "";
       c.description ||= "";
       if (!Object.prototype.hasOwnProperty.call(c, "image")) {
-        const canonical = SEED_OFFICIEL.planches
-          .find((x) => x.id === p.id)
-          ?.cases.find((x) => x.id === c.id);
-        c.image = publicAsset(canonical?.image ?? null);
-      } else {
-        c.image = publicAsset(c.image ?? null);
-      }
+        c.image = publicAsset(SEED_OFFICIEL.planches.flatMap((p) => p.cases).find((x) => x.id === c.id)?.image);
+      } else c.image = publicAsset(c.image);
       c.overlays = Array.isArray(c.overlays) ? c.overlays : [];
       c.textes ||= [];
       c.personnages ||= [];
@@ -80,8 +84,8 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
         o.align ||= "center";
       });
     });
-  });
-  SEED.projet.nombre_planches = SEED.planches.length;
+  }
+  SEED.projet.nombre_planches = computeVisualPages(SEED).length;
   return SEED;
 }
 
@@ -105,6 +109,7 @@ const seedSchema = z
         z
           .object({
             id: z.string(),
+            case_id: z.string().optional(),
             planche: z.union([z.number(), z.string()]),
             case: z.string(),
             regle: z.string(),
@@ -178,6 +183,71 @@ const seedSchema = z
         })
         .passthrough(),
     ),
+    ordre_cases: z.array(z.string()).optional(),
+    cases: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1),
+            numero: z.string().optional(),
+            titre: z.string().nullable().optional(),
+            description: z.string().nullable().optional(),
+            image: z.string().nullable().optional(),
+            statut: z.string().optional(),
+            planche_id: z.string().optional(),
+            source_planche_id: z.string().optional(),
+            numero_source: z.string().optional(),
+            instructions_case: z.string().nullable().optional(),
+            date_histoire: z.string().nullable().optional(),
+            notes_editoriales: z.array(z.string()).optional(),
+            layout_size: z
+              .object({
+                width: z.number().int().min(1).max(3),
+                height: z.number().int().min(1).max(4),
+              })
+              .optional(),
+            personnages: z.array(z.string()).optional(),
+            textes: z
+              .array(
+                z
+                  .object({
+                    id: z.string().optional(),
+                    type: z.string(),
+                    contenu: z.string(),
+                    personnage_id: z.string().nullable().optional(),
+                    preserve_exact: z.boolean().optional(),
+                  })
+                  .passthrough(),
+              )
+              .optional(),
+            gardien_override: z
+              .object({
+                archiviste: guardianSchema.optional(),
+                armurier: guardianSchema.optional(),
+              })
+              .optional(),
+            overlays: z
+              .array(
+                z
+                  .object({
+                    id: z.string().optional(),
+                    type: z.enum(["text", "speech"]).optional(),
+                    text_ref: z.string().nullable().optional(),
+                    content: z.string().optional(),
+                    x: z.number().optional(),
+                    y: z.number().optional(),
+                    width: z.number().optional(),
+                    height: z.number().optional(),
+                    font_size: z.number().optional(),
+                    align: z.enum(["left", "center", "right"]).optional(),
+                  })
+                  .passthrough(),
+              )
+              .optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -190,7 +260,11 @@ export function parseSeed(data: unknown): Seed {
   const seed = normalizeSeed(result.data as unknown as Seed);
   const ids = new Set<string>();
   for (const p of seed.planches) {
-    for (const item of [p, ...p.cases, ...p.cases.flatMap((c) => [...c.textes, ...c.overlays])]) {
+    if (ids.has(p.id)) throw new Error(`Identifiant dupliqué : ${p.id}`);
+    ids.add(p.id);
+  }
+  for (const c of seed.cases || []) {
+    for (const item of [c, ...c.textes, ...c.overlays]) {
       if (ids.has(item.id)) throw new Error(`Identifiant dupliqué : ${item.id}`);
       ids.add(item.id);
     }
@@ -218,16 +292,19 @@ export function pageById(seed: Seed, id: string) {
   return seed.planches.find((p) => p.id === id);
 }
 
-export function caseById(seed: Seed, pid: string, cid: string) {
-  return pageById(seed, pid)?.cases.find((c) => c.id === cid);
+export function caseById(seed: Seed, _pid: string, cid: string) {
+  return storyCases(seed).find((c) => c.id === cid);
 }
 
-export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase } | null {
-  for (const p of seed.planches) {
-    const c = p.cases.find((x) => x.id === cid);
-    if (c) return { p, c };
-  }
-  return null;
+export function caseEntry(seed: Seed, cid: string): { p: Planche | undefined; c: PanelCase } | null {
+  const c =
+    storyCases(seed).find((x) => x.id === cid) ||
+    seed.planches.flatMap((p) => p.cases || []).find((x) => x.id === cid);
+  if (!c) return null;
+  const p =
+    seed.planches.find((page) => page.id === c.planche_id) ||
+    seed.planches.find((page) => (page.cases || []).some((x) => x.id === cid));
+  return { p, c };
 }
 
 export function emptyFilters() {
@@ -239,17 +316,15 @@ export function emptyMeta(): Meta {
 }
 
 export function totalCases(seed: Seed) {
-  return seed.planches.reduce((n, p) => n + p.cases.length, 0);
+  return storyCases(seed).length;
 }
 
 export function caseImageCount(seed: Seed) {
-  return seed.planches.flatMap((p) => p.cases).filter((c) => c.image).length;
+  return storyCases(seed).filter((c) => c.image).length;
 }
 
 export function idbImageCount(seed: Seed) {
-  return seed.planches
-    .flatMap((p) => p.cases)
-    .filter((c) => String(c.image || "").startsWith("idb://")).length;
+  return storyCases(seed).filter((c) => String(c.image || "").startsWith("idb://")).length;
 }
 
 export function peopleOf(seed: Seed) {

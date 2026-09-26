@@ -55,8 +55,15 @@ export interface PanelCase {
   notes: string | null;
   source_verbatim: string | null;
   statut: CaseStatus | string;
+  instructions_case?: string | null;
+  date_histoire?: string | null;
+  notes_editoriales?: string[];
   layout_size?: { width: number; height: number };
   gardien_override?: Partial<Record<GuardianId, GuardianState>>;
+  /** Derived 1-based index. Display only — position is the array order. */
+  ordre?: number;
+  /** Manuscript planche this case was migrated from. Not a visual page. */
+  planche_id?: string;
 }
 
 export interface Planche {
@@ -80,6 +87,7 @@ export interface Personnage {
 }
 
 export interface Gardien {
+  note?: string;
   id: GuardianId | string;
   nom?: string;
   personnage_id?: string;
@@ -97,6 +105,7 @@ export interface EditorialRule {
 }
 
 export interface EditorialChoice {
+  case_id?: string;
   id: string;
   planche: number | string;
   case: string;
@@ -121,6 +130,8 @@ export interface Seed {
   regles_editoriales: EditorialRule[];
   avant_propos?: Record<string, unknown>;
   choix_editoriaux_ouverts: EditorialChoice[];
+  /** Persisted narrative order. Visual planches are computed from this list. */
+  cases?: PanelCase[];
   planches: Planche[];
 }
 
@@ -148,6 +159,7 @@ export interface MediaMeta {
 }
 
 export interface CoherenceIssue {
+  caseId?: string;
   level: "error" | "warn" | "ok";
   title: string;
   text: string;
@@ -156,7 +168,6 @@ export interface CoherenceIssue {
 }
 
 export interface VisualItem {
-  p: Planche;
   c: PanelCase;
   row: number;
   col: number;

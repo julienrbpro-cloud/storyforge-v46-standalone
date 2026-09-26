@@ -50,19 +50,18 @@ try {
       );
     }
     await page.goto(base, { waitUntil: "domcontentloaded" });
-    await click("Entrer dans le studio");
-    await page.getByText("Projet actif", { exact: true }).waitFor();
-    assert.equal(
-      await page.getByText("152 cases dans le manuscrit · V4.6", { exact: true }).count(),
-      1,
-    );
+    await page.getByRole("button", { name: "Nous, malgré nous", exact: true }).waitFor();
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
+    assert.equal(await page.getByRole("link", { name: "Accueil", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Projets", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Bibliothèque", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Profil", exact: true }).count(), 0);
     await page.screenshot({ animations: "disabled", path: join(output, `home-${width}.png`) });
-    pass("entry and canonical 29-page / 152-case project");
+    pass("projects list without the old navigation");
     await page.getByRole("button", { name: "Nouveau projet" }).click();
     await page.getByRole("dialog").getByLabel("Nom du projet").fill("Projet QA");
     await page.getByRole("dialog").getByRole("button", { name: "Créer le projet" }).click();
-    await page.getByText("Aucune planche pour ce filtre.").waitFor();
-    await click("Nouvelle planche");
+    await page.getByText("Aucune planche.", { exact: true }).waitFor();
     await click("Ajouter une case");
     const newCase = page.getByRole("dialog", { name: "Case 1", exact: true });
     await newCase.getByText("Options avancées").click();
@@ -71,38 +70,41 @@ try {
     await newCase.getByRole("button", { name: "Fermer" }).click();
     assert.equal(await page.locator(".visual-grid > div").first().evaluate((el) => getComputedStyle(el).gridColumnEnd), "span 2");
     assert.equal(await page.locator(".visual-grid").count(), 1);
-    await page.goto(base + "/atelier");
-    await page.getByRole("button", { name: "Nous, malgré nous" }).click();
-    await page.getByText("MÉTRO PAPINEAU", { exact: true }).waitFor();
-    await page.goto(base + "/atelier");
-    pass("global plus creates a separate project and case edits return to its 3x3 grid");
-    await page.locator('a[href*="chapitre"]').first().click();
-    await page.waitForURL("**/projet?*");
-    await page.getByRole("button", { name: "Tout voir", exact: true }).waitFor();
-    await page.getByRole("button", { name: "Actions", exact: true }).first().waitFor();
-    const filtered = await page.getByRole("button", { name: "Actions", exact: true }).count();
-    assert.ok(filtered > 0 && filtered < 29);
-    await click("Tout voir");
-    await page.waitForFunction(
-      () => document.querySelectorAll('button[aria-label="Actions"]').length === 29,
-    );
-    pass("chapter filter and Tout voir");
-    await page.getByRole("button", { name: "Actions", exact: true }).first().click();
-    await page.getByRole("menuitem", { name: "Descendre", exact: true }).click();
-    assert.ok(new URL(page.url()).pathname === "/projet");
-    await page.getByRole("button", { name: "Actions", exact: true }).nth(1).click();
-    await page.getByRole("menuitem", { name: "Monter", exact: true }).click();
-    await page.getByRole("menu").waitFor({ state: "hidden" });
-    assert.equal(await page.getByRole("button", { name: "Actions", exact: true }).count(), 29);
+    await page.goto(base + "/");
+    await page.getByRole("button", { name: "Nous, malgré nous", exact: true }).click();
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
+    assert.match(await page.getByText(/planches visuelles · 152 cases/).innerText(), /planches visuelles · 152 cases/);
+    assert.ok((await page.getByRole("button", { name: /^Planche \d+$/ }).count()) > 1);
+    assert.equal(await page.locator(".visual-grid").count(), 0);
+    assert.equal(await page.getByText(/CHAPITRE/).count(), 0);
+    assert.equal(await page.getByRole("link", { name: "Personnages & règles", exact: true }).count(), 1);
+    assert.equal(await page.getByRole("link", { name: "Exporter", exact: true }).count(), 1);
+    pass("global plus creates a project; opening one shows every visual planche");
+    await page.getByRole("button", { name: "Planche 1", exact: true }).click();
+    await page.locator(".visual-grid").waitFor();
+    assert.equal(await page.locator(".visual-grid").count(), 1);
+    await page.locator(".visual-grid button").first().click();
+    let orderDialog = page.getByRole("dialog", { name: "Case 1", exact: true });
+    await orderDialog.getByRole("button", { name: "Descendre", exact: true }).click();
+    orderDialog = page.getByRole("dialog", { name: "Case 2", exact: true });
+    await orderDialog.waitFor();
+    await orderDialog.getByRole("button", { name: "Monter", exact: true }).click();
+    await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
+    assert.equal(new URL(page.url()).pathname, "/projet");
+    await page.getByRole("dialog", { name: "Case 1", exact: true }).getByRole("button", { name: "Fermer", exact: true }).click();
     pass("reorder menu does not accidentally open a page");
-    await page.getByText("MÉTRO PAPINEAU", { exact: true }).click();
     await page.getByRole("button").filter({ hasText: "Case divisée en deux" }).click();
     let dialog = page.getByRole("dialog", { name: "Case 1", exact: true });
     await dialog.getByRole("button", { name: "À valider", exact: true }).click();
     await dialog.getByRole("button", { name: "Brouillon", exact: true }).waitFor();
     await dialog.getByLabel("Titre", { exact: true }).fill("QA titre");
     await dialog.getByLabel("Mise en image", { exact: true }).fill("QA description");
+    await dialog.getByLabel("Note", { exact: true }).fill("Note QA P01");
+    await dialog.getByText("Contexte éditorial de la case", { exact: true }).click();
+    await dialog.getByLabel("Instructions de la case", { exact: true }).fill("Contexte QA attaché à la case");
     await dialog.getByText("Options avancées", { exact: true }).click();
+    assert.equal(await dialog.getByRole("combobox", { name: "Archiviste", exact: true }).inputValue(), "absent");
+    await dialog.getByRole("combobox", { name: "Archiviste", exact: true }).selectOption("2");
     await dialog.getByLabel(/Largeur grille/i).selectOption("2");
     await dialog.getByLabel(/Hauteur grille/i).selectOption("2");
     await dialog.getByRole("button", { name: "Bulle", exact: true }).click();
@@ -119,7 +121,12 @@ try {
     assert.notEqual(left, "12%");
     await dialog.getByRole("button", { name: "Assembler le prompt IA", exact: true }).click();
     const prompt = page.getByRole("dialog", { name: /Prompt/ });
-    assert.match(await prompt.locator("textarea").inputValue(), /QA description/);
+    const promptValue = await prompt.locator("textarea").inputValue();
+    assert.match(promptValue, /QA description/);
+    assert.match(promptValue, /Contexte QA attaché à la case/);
+    assert.match(promptValue, /Case 1/);
+    assert.match(promptValue, /Planche visuelle/);
+    assert.match(promptValue, /Archiviste: présent, niveau 2/);
     await prompt.getByRole("button", { name: "Fermer", exact: true }).last().click();
     await upload(dialog.getByRole("button", { name: "Remplacer l’image", exact: true }), {
       name: "qa.png",
@@ -145,48 +152,34 @@ try {
     assert.equal(resizedGrid.rowEnd, "span 2");
     assert.equal(
       await resizedCard.locator("img").first().evaluate((img) => getComputedStyle(img).objectFit),
-      "contain",
+      "cover",
     );
     pass("case editor, image upload, visible lettering, drag, size, full-image fit and prompt");
-    await page.getByText("Détails de la planche et gardiens").click();
-    await page.getByLabel("Note de production", { exact: true }).fill("Note QA P01");
-    await page.getByLabel("Archiviste", { exact: true }).selectOption("2");
-    await page.getByText("Détails de la planche et gardiens").click();
-    await page.keyboard.press("j");
-    await page.waitForURL("**/planche/P02");
-    if ((await page.getByLabel("Note de production", { exact: true }).count()) === 0)
-      await page.getByText("Détails de la planche et gardiens").click();
-    assert.equal(await page.getByLabel("Note de production", { exact: true }).inputValue(), "");
-    await page.getByText("Détails de la planche et gardiens").click();
-    await page.keyboard.press("k");
-    await page.waitForURL("**/planche/P01");
-    if ((await page.getByLabel("Note de production", { exact: true }).count()) === 0)
-      await page.getByText("Détails de la planche et gardiens").click();
-    assert.equal(
-      await page.getByLabel("Note de production", { exact: true }).inputValue(),
-      "Note QA P01",
-    );
-    pass("notes stay attached to their own page and keyboard navigation");
     await waitSaved();
     await page.reload();
-    await page.getByText("Détails de la planche et gardiens").click();
-    assert.equal(
-      await page.getByLabel("Note de production", { exact: true }).inputValue(),
-      "Note QA P01",
-    );
-    assert.equal(await page.getByLabel("Archiviste", { exact: true }).inputValue(), "2");
-    pass("reload keeps edits and guardian state");
-    await page.goto(base + "/planche/P01");
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
+    assert.ok((await page.getByRole("button", { name: /^Planche \d+$/ }).count()) > 1);
+    await page.getByRole("button", { name: "Planche 1", exact: true }).click();
+    await page.locator(".visual-grid button").first().click();
+    dialog = page.getByRole("dialog", { name: "Case 1", exact: true });
+    assert.equal(await dialog.getByLabel("Note", { exact: true }).inputValue(), "Note QA P01");
+    await dialog.getByText("Options avancées", { exact: true }).click();
+    assert.equal(await dialog.getByRole("combobox", { name: "Archiviste", exact: true }).inputValue(), "2");
+    await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
+    pass("reload keeps the case note and its own guardian state");
+    await page.goto(base + "/projet");
+    await page.getByRole("button", { name: "Planche 1", exact: true }).click();
     await page.locator(".visual-grid").waitFor();
     assert.equal(await page.locator(".visual-grid").count(), 1);
     await page.locator(".visual-grid button").first().click();
     await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
     await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
-    pass("one 3x3 grid applies dimensions and opens the selected case");
+    assert.equal(await page.getByLabel("Planche visuelle").inputValue(), "0");
+    pass("one 3x4 grid applies dimensions and opens the selected case");
     await page.goto(base + "/projet");
     await page.getByRole("button", { name: "Rechercher", exact: true }).click();
     await page.getByPlaceholder("Planche, case, personnage…").fill("QA description");
-    await page.getByRole("button", { name: /MÉTRO PAPINEAU · case 1/ }).click();
+    await page.getByRole("button", { name: /^Case 1\b/ }).click();
     await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
     await page.getByRole("dialog").getByRole("button", { name: "Fermer", exact: true }).click();
     pass("search finds edited content and opens its case");
@@ -202,7 +195,7 @@ try {
     const backupPath = await backupDownload.path();
     const backup = JSON.parse(await readFile(backupPath, "utf8"));
     assert.equal(backup.media.length, 1);
-    assert.equal(backup.seed.planches[0].cases[0].titre, "QA titre");
+    assert.equal(backup.seed.cases[0].titre, "QA titre");
     assert.equal(backup.media[0].data.split(",")[1], pixel.toString("base64"));
     const restore = page
       .getByText("Restaurer une sauvegarde", { exact: true })
@@ -228,18 +221,41 @@ try {
     await (await zipPromise).saveAs(join(output, `project-${width}.zip`));
     pass("ZIP download with built-in and imported images");
     await page.goto(base + "/projet");
-    await click("Nouvelle planche");
     await click("Ajouter une case");
-    dialog = page.getByRole("dialog", { name: "Case 1", exact: true });
+    dialog = page.getByRole("dialog", { name: "Case 153", exact: true });
     await dialog.waitFor();
     await dialog.getByLabel("Titre", { exact: true }).fill("Disposable");
+    await dialog.getByRole("button", { name: "Premier", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Case 1", exact: true });
+    await dialog.waitFor();
+    assert.equal(await dialog.getByLabel("Titre", { exact: true }).inputValue(), "Disposable");
+    await dialog.getByRole("button", { name: "Dernier", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Case 153", exact: true });
+    await dialog.waitFor();
+    assert.equal(await dialog.getByLabel("Titre", { exact: true }).inputValue(), "Disposable");
+    await dialog.getByRole("button", { name: "Déplacer", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "Case 1", exact: true });
+    await dialog.waitFor();
+    assert.equal(await dialog.getByLabel("Titre", { exact: true }).inputValue(), "Disposable");
     await dialog.getByRole("button", { name: "Supprimer la case", exact: true }).click();
-    await page.getByTitle("Plus", { exact: true }).click();
-    await page.getByRole("menuitem", { name: "Supprimer la planche", exact: true }).click();
-    await page.waitForURL("**/projet");
-    assert.equal(await page.getByRole("button", { name: "Actions", exact: true }).count(), 29);
-    pass("create/delete page and case");
-    await page.goto(base + "/planche/P01");
+    await page.getByText(/planches visuelles · 152 cases/).waitFor();
+    pass("move a case before case 1, then delete that case and planche");
+    await page.getByLabel("Planche visuelle").selectOption("1");
+    await page.locator(".visual-grid button").first().click();
+    dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Titre", { exact: true }).fill("Retour QA");
+    await dialog.getByRole("button", { name: "Fermer", exact: true }).click();
+    assert.equal(await page.getByLabel("Planche visuelle").inputValue(), "1");
+    await page.locator(".visual-grid button").first().click();
+    dialog = page.getByRole("dialog");
+    assert.equal(await dialog.getByLabel("Titre", { exact: true }).inputValue(), "Retour QA");
+    await dialog.getByRole("button", { name: "Premier", exact: true }).click();
+    await page.getByRole("dialog", { name: "Case 1", exact: true }).getByRole("button", { name: "Fermer", exact: true }).click();
+    assert.equal(await page.getByLabel("Planche visuelle").inputValue(), "0");
+    assert.match(await page.locator(".visual-grid button").first().innerText(), /Retour QA/);
+    pass("editor returns to the visual page of the case");
+    await page.goto(base + "/projet");
+    await page.getByRole("button", { name: "Planche 1", exact: true }).click();
     await page.addScriptTag({
       content: 'window.print = () => { document.body.dataset.printed = "yes"; };',
     });
@@ -257,7 +273,7 @@ try {
     await page.emulateMedia({ media: "screen" });
     pass("printing waits for images and excludes application controls");
     await page.goto(base + "/bibliotheque");
-    const firstPerson = page.locator("article").first();
+    const firstPerson = page.locator("#personnages article").first();
     await firstPerson.getByLabel("Nom", { exact: true }).fill("Julien QA");
     await firstPerson.getByLabel("Rôle", { exact: true }).fill("Rôle QA");
     await firstPerson.getByLabel("Description", { exact: true }).fill("Description QA");
@@ -267,33 +283,56 @@ try {
       buffer: pixel,
     });
     await page.getByText("Image de référence enregistrée", { exact: true }).waitFor();
-    await click("Règles");
-    const firstRule = page.locator("article").first();
+    const firstRule = page.locator("#regles article").first();
     await firstRule.getByLabel("Titre", { exact: true }).fill("PRINCIPE QA");
     await firstRule.getByLabel("Contenu", { exact: true }).fill("Règle QA modifiable");
+    const firstGuardian = page.locator("#gardiens article").first();
+    await firstGuardian.getByLabel("Nom", { exact: true }).fill("Archiviste QA");
     await waitSaved();
     await page.reload();
-    await click("Personnages");
-    assert.equal(await page.locator("article").first().getByLabel("Nom", { exact: true }).inputValue(), "Julien QA");
+    assert.equal(await page.locator("#personnages article").first().getByLabel("Nom", { exact: true }).inputValue(), "Julien QA");
     assert.equal(
-      await page.locator("article").first().getByLabel("Description", { exact: true }).inputValue(),
+      await page.locator("#personnages article").first().getByLabel("Description", { exact: true }).inputValue(),
       "Description QA",
     );
-    await click("Règles");
-    assert.equal(await page.locator("article").first().getByLabel("Titre", { exact: true }).inputValue(), "PRINCIPE QA");
+    assert.equal(await page.locator("#regles article").first().getByLabel("Titre", { exact: true }).inputValue(), "PRINCIPE QA");
     assert.equal(
-      await page.locator("article").first().getByLabel("Contenu", { exact: true }).inputValue(),
+      await page.locator("#regles article").first().getByLabel("Contenu", { exact: true }).inputValue(),
       "Règle QA modifiable",
     );
-    await click("Cohérence");
-    await click("Personnages");
-    assert.ok((await page.locator("article").count()) >= 5);
+    assert.equal(
+      await page.locator("#gardiens article").first().getByLabel("Nom", { exact: true }).inputValue(),
+      "Archiviste QA",
+    );
+    assert.equal(
+      await page.locator("#personnages img").first().evaluate((img) => getComputedStyle(img).objectFit),
+      "contain",
+    );
+    assert.equal(
+      await page.locator("#gardiens img").first().evaluate((img) => getComputedStyle(img).objectFit),
+      "contain",
+    );
+    assert.ok((await page.locator("#personnages article").count()) >= 3);
     assert.equal(
       await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1),
       false,
     );
     assert.deepEqual(errors, []);
-    pass("editable library persists character image/text and editorial rules without mobile overflow");
+    pass("editable characters, guardians and rules keep full images without mobile overflow");
+    await page.getByLabel("Règle du choix", { exact: true }).fill("Blocage QA : attendre le verbatim");
+    await waitSaved();
+    await page.reload();
+    assert.equal(await page.getByLabel("Règle du choix", { exact: true }).inputValue(), "Blocage QA : attendre le verbatim");
+    await page.getByRole("button").filter({ hasText: "Blocage QA : attendre le verbatim" }).click();
+    const editorial = page.getByRole("dialog");
+    await editorial.waitFor();
+    await editorial.getByRole("button", { name: "Premier", exact: true }).click();
+    await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
+    await editorial.getByText("Options avancées", { exact: true }).click();
+    await editorial.getByRole("button", { name: "Assembler le prompt IA", exact: true }).click();
+    assert.ok((await page.getByRole("dialog", { name: "Prompt · Case 1", exact: true }).locator("textarea").inputValue()).includes("Blocage QA : attendre le verbatim"));
+    assert.deepEqual(errors, []);
+    pass("editorial choice persists and its coherence link follows the moved case into its prompt");
     await context.close();
   }
 } catch (error) {

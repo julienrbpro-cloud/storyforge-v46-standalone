@@ -3,6 +3,7 @@ import { activeProjectMedia, blobToDataUrl, dataUrlToBlob, dbAll, type MediaReco
 import { clone, normalizeMeta, parseSeed } from "./seed";
 import { APP_VERSION } from "./constants";
 import type { Meta, Seed } from "./types";
+import { migrateProductionNotes, storyCases } from "./sequence";
 
 const sessionSchema = z.object({
   seed: z.unknown().refine((x) => x != null, "Seed manquant"),
@@ -34,7 +35,7 @@ export async function createSession(
   // Snapshot before asynchronous file reads, so typing during export cannot mix revisions.
   const snapshot = { seed: clone(seed), meta: clone(meta), media_meta: clone(mediaMeta) };
   const media = await Promise.all(
-    activeProjectMedia(records ?? (await dbAll()), seed).map(async ({ blob, ...record }) => ({
+    activeProjectMedia(records ?? (await dbAll()), snapshot.seed).map(async ({ blob, ...record }) => ({
       ...record,
       data: await blobToDataUrl(blob),
     })),
@@ -55,14 +56,15 @@ export function parseSession(data: unknown) {
   if (!result.success) throw new Error("Sauvegarde de session invalide");
   const d = result.data;
   const seed = parseSeed(d.seed);
+  const meta = normalizeMeta(d.meta);
+  migrateProductionNotes(seed, meta);
   const records = new Map<string, MediaRecord>();
   for (const { data: encoded, ...record } of d.media || []) {
     if (records.has(record.id)) throw new Error(`Image dupliquée : ${record.id}`);
     records.set(record.id, { ...record, blob: dataUrlToBlob(encoded) });
   }
   // Legacy standalone backups stored images by case id.
-  for (const p of seed.planches)
-    for (const c of p.cases) {
+  for (const c of storyCases(seed)) {
       const legacy = d.images?.[c.id];
       if (legacy) {
         const id = `legacy-${c.id}`;
@@ -80,7 +82,7 @@ export function parseSession(data: unknown) {
   }
   return {
     seed,
-    meta: normalizeMeta(d.meta),
+    meta,
     mediaMeta: d.media_meta || {},
     records: [...records.values()],
   };
