@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, MoreHorizontal, Plus, Printer } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, MoreHorizontal, Plus, Printer } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CaseCard } from "@/components/case-card";
 import { CaseInspector } from "@/components/case-inspector";
@@ -32,6 +32,7 @@ export function ProjectView() {
   const setSelected = useStudio((s) => s.setSelectedCase);
   const addCase = useStudio((s) => s.addCase);
   const deleteCase = useStudio((s) => s.deleteCase);
+  const moveCaseStep = useStudio((s) => s.moveCaseStep);
   const [boardOpen, setBoardOpen] = useState(false);
   void revision;
   const cases = storyCases(seed);
@@ -52,6 +53,12 @@ export function ProjectView() {
     const id = useStudio.getState().selectedCaseId;
     if (id) setIndex(visualPageIndexOf(storyCases(useStudio.getState().seed), id));
     setSelected(null);
+  }
+
+  function moveCaseFromGrid(caseId: string, dir: -1 | 1) {
+    moveCaseStep(caseId, dir);
+    const ordered = storyCases(useStudio.getState().seed);
+    setIndex(visualPageIndexOf(ordered, caseId));
   }
 
   return (
@@ -135,15 +142,41 @@ export function ProjectView() {
                 </select>
               </div>
               <div className="visual-grid w-full max-w-[900px]">
-                {page.items.map(({ c, row, col, width, height }) => (
-                  <div
-                    key={c.id}
-                    className="min-h-0 min-w-0"
-                    style={{ gridColumn: `${col + 1} / span ${width}`, gridRow: `${row + 1} / span ${height}` }}
-                  >
-                    <CaseCard panel={c} compact selected={selected === c.id} onSelect={() => setSelected(c.id)} />
-                  </div>
-                ))}
+                {page.items.map(({ c, row, col, width, height }) => {
+                  const storyIndex = cases.findIndex((item) => item.id === c.id);
+                  const label = caseLabel(c, cases);
+                  return (
+                    <div
+                      key={c.id}
+                      className="relative min-h-0 min-w-0"
+                      style={{ gridColumn: `${col + 1} / span ${width}`, gridRow: `${row + 1} / span ${height}` }}
+                    >
+                      <CaseCard panel={c} compact selected={selected === c.id} onSelect={() => setSelected(c.id)} />
+                      <div className="absolute top-1.5 right-1.5 z-20 flex gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Monter la case ${label}`}
+                          title="Monter"
+                          disabled={storyIndex <= 0}
+                          className="grid size-7 place-items-center rounded-md border border-paper-line bg-paper/95 text-paper-ink shadow-sm disabled:cursor-default disabled:opacity-35"
+                          onClick={() => moveCaseFromGrid(c.id, -1)}
+                        >
+                          <ArrowUp className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Descendre la case ${label}`}
+                          title="Descendre"
+                          disabled={storyIndex < 0 || storyIndex >= cases.length - 1}
+                          className="grid size-7 place-items-center rounded-md border border-paper-line bg-paper/95 text-paper-ink shadow-sm disabled:cursor-default disabled:opacity-35"
+                          onClick={() => moveCaseFromGrid(c.id, 1)}
+                        >
+                          <ArrowDown className="size-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </>
           ) : pages.length ? (
