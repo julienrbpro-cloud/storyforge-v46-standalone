@@ -105,6 +105,21 @@ test("invalid move indices leave the story untouched", () => {
   assert.equal(JSON.stringify(seed), before);
 });
 
+test("deleting a case removes editorial choices linked to its stable id", () => {
+  const seed = normalizeSeed(SEED_OFFICIEL);
+  const target = seed.cases![0];
+  const survivor = seed.cases![1];
+  seed.choix_editoriaux_ouverts.push(
+    { id: "delete-with-case", case_id: target.id, planche: 1, case: target.numero, regle: "À supprimer" },
+    { id: "keep-with-case", case_id: survivor.id, planche: 1, case: survivor.numero, regle: "À conserver" },
+  );
+  useStudio.setState({ seed, meta: emptyMeta(), recoveryRequired: false });
+  useStudio.getState().deleteCase("", target.id);
+  assert.equal(storyCases(seed).some((c) => c.id === target.id), false);
+  assert.equal(seed.choix_editoriaux_ouverts.some((choice) => choice.id === "delete-with-case"), false);
+  assert.equal(seed.choix_editoriaux_ouverts.some((choice) => choice.id === "keep-with-case"), true);
+});
+
 test("historical production notes migrate without duplicating on reload", () => {
   const seed = normalizeSeed(SEED_OFFICIEL);
   const meta = emptyMeta();
