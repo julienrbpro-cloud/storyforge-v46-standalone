@@ -2,6 +2,7 @@ import officialJson from "@/data/seed.json";
 import { uid, clamp } from "./utils";
 import { migrateSequence, storyCases } from "./sequence";
 import type { Overlay, PanelCase, Planche, Seed, Meta } from "./types";
+import { computeVisualPages } from "./visual-layout";
 import { z } from "zod";
 
 export const SEED_OFFICIEL = officialJson as Seed;
@@ -48,46 +49,20 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       armurier: p.gardien_etat?.armurier || { present: false, niveau: null },
     };
     p.cases ||= [];
-    p.cases.forEach((c, ci) => {
+    p.cases.forEach((c, index) => {
       c.id ||= uid("case");
-      c.numero ??= String(ci + 1);
-      c.description ||= "";
-      if (!Object.prototype.hasOwnProperty.call(c, "image")) {
-        const canonical = SEED_OFFICIEL.planches
-          .find((x) => x.id === p.id)
-          ?.cases.find((x) => x.id === c.id);
-        c.image = publicAsset(canonical?.image ?? null);
-      } else {
-        c.image = publicAsset(c.image ?? null);
-      }
-      c.overlays = Array.isArray(c.overlays) ? c.overlays : [];
-      c.textes ||= [];
-      c.personnages ||= [];
-      c.statut ||= "a_valider";
-      if (Array.isArray(c.notes)) c.notes = (c.notes as unknown as string[]).join("\n");
-      c.notes = c.notes ? String(c.notes) : null;
-      c.textes.forEach((t, ti) => {
-        t.id ||= `${c.id}-T${String(ti + 1).padStart(2, "0")}`;
-        t.preserve_exact = !!t.preserve_exact;
-      });
-      c.overlays.forEach((o: Overlay, oi: number) => {
-        o.id ||= `${c.id}-OV${String(oi + 1).padStart(2, "0")}`;
-        o.type ||= "text";
-        o.x = clamp(Number(o.x ?? 0.1), 0, 1);
-        o.y = clamp(Number(o.y ?? 0.1), 0, 1);
-        o.width = clamp(Number(o.width ?? 0.32), 0.08, 1);
-        o.height = clamp(Number(o.height ?? 0.18), 0.06, 1);
-        o.font_size = clamp(Number(o.font_size ?? 0.045), 0.02, 0.12);
-        o.align ||= "center";
-      });
+      c.numero ??= String(index + 1);
     });
   });
+  migrateSequence(SEED);
   if (Array.isArray(SEED.cases)) {
     SEED.cases.forEach((c) => {
       c.id ||= uid("case");
       c.numero ??= "";
       c.description ||= "";
-      c.image = publicAsset(c.image ?? null);
+      if (!Object.prototype.hasOwnProperty.call(c, "image")) {
+        c.image = publicAsset(SEED_OFFICIEL.planches.flatMap((p) => p.cases).find((x) => x.id === c.id)?.image);
+      } else c.image = publicAsset(c.image);
       c.overlays = Array.isArray(c.overlays) ? c.overlays : [];
       c.textes ||= [];
       c.personnages ||= [];
@@ -110,8 +85,7 @@ export function normalizeSeed(input: Seed | null | undefined): Seed {
       });
     });
   }
-  migrateSequence(SEED);
-  SEED.projet.nombre_planches = SEED.planches.length;
+  SEED.projet.nombre_planches = computeVisualPages(SEED).length;
   return SEED;
 }
 
@@ -135,6 +109,7 @@ const seedSchema = z
         z
           .object({
             id: z.string(),
+            case_id: z.string().optional(),
             planche: z.union([z.number(), z.string()]),
             case: z.string(),
             regle: z.string(),
@@ -208,6 +183,7 @@ const seedSchema = z
         })
         .passthrough(),
     ),
+    ordre_cases: z.array(z.string()).optional(),
     cases: z
       .array(
         z
@@ -219,6 +195,11 @@ const seedSchema = z
             image: z.string().nullable().optional(),
             statut: z.string().optional(),
             planche_id: z.string().optional(),
+            source_planche_id: z.string().optional(),
+            numero_source: z.string().optional(),
+            instructions_case: z.string().nullable().optional(),
+            date_histoire: z.string().nullable().optional(),
+            notes_editoriales: z.array(z.string()).optional(),
             layout_size: z
               .object({
                 width: z.number().int().min(1).max(3),
@@ -311,14 +292,11 @@ export function pageById(seed: Seed, id: string) {
   return seed.planches.find((p) => p.id === id);
 }
 
-export function caseById(seed: Seed, pid: string, cid: string) {
-  return (
-    storyCases(seed).find((c) => c.id === cid && (!pid || !c.planche_id || c.planche_id === pid)) ||
-    pageById(seed, pid)?.cases.find((c) => c.id === cid)
-  );
+export function caseById(seed: Seed, _pid: string, cid: string) {
+  return storyCases(seed).find((c) => c.id === cid);
 }
 
-export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase } | null {
+export function caseEntry(seed: Seed, cid: string): { p: Planche | undefined; c: PanelCase } | null {
   const c =
     storyCases(seed).find((x) => x.id === cid) ||
     seed.planches.flatMap((p) => p.cases || []).find((x) => x.id === cid);
@@ -326,7 +304,6 @@ export function caseEntry(seed: Seed, cid: string): { p: Planche; c: PanelCase }
   const p =
     seed.planches.find((page) => page.id === c.planche_id) ||
     seed.planches.find((page) => (page.cases || []).some((x) => x.id === cid));
-  if (!p) return null;
   return { p, c };
 }
 

@@ -1,6 +1,6 @@
 import { GUARDIANS } from "./constants";
 import { SEED_OFFICIEL, typeInfo } from "./seed";
-import { choiceFor } from "./coherence";
+import { choicesFor } from "./coherence";
 import { caseLabel, storyCases } from "./sequence";
 import type { GuardianId, PanelCase, Seed } from "./types";
 import { visualPageIndexOf } from "./visual-layout";
@@ -35,8 +35,7 @@ export function buildPrompt(seed: Seed, c: PanelCase) {
   const ordered = storyCases(seed);
   const visible = caseLabel(c, ordered);
   const visualPage = visualPageIndexOf(ordered, c.id) + 1;
-  const canonical = SEED_OFFICIEL.planches.find((page) => page.cases.some((panel) => panel.id === c.id));
-  const choice = canonical ? choiceFor(seed, canonical, c) : undefined;
+  const choices = choicesFor(seed, c);
   const origin = c.planche_id ? seed.planches.find((page) => page.id === c.planche_id) : undefined;
   const states = GUARDIANS.map(([gid, label]) => `${label}: ${declaredGuardian(c, gid)}`).join("\n");
   const texts =
@@ -67,6 +66,9 @@ ${provenance}
 MISE EN IMAGE
 ${c.description || "[Description volontairement absente]"}
 
+CONTEXTE DE LA CASE
+${[c.date_histoire, c.instructions_case, ...(c.notes_editoriales || [])].filter(Boolean).join("\n") || "Aucun contexte supplémentaire."}
+
 PERSONNAGES ET RÉFÉRENCES
 ${refs}
 
@@ -75,7 +77,7 @@ ${states}
 
 TEXTES À INTÉGRER
 ${texts}
-${choice?.bloque_generation_du_texte ? `\nBLOCAGE ÉDITORIAL OBLIGATOIRE\n${choice.regle}` : ""}
+${choices.map((choice) => `\n${choice.bloque_generation_du_texte ? "BLOCAGE ÉDITORIAL OBLIGATOIRE" : "CHOIX ÉDITORIAL"}\n${choice.regle}`).join("\n")}
 
 RÈGLES PERTINENTES
 ${rules}

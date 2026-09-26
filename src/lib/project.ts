@@ -34,30 +34,19 @@ export function inferPageStatus(p: Planche, seed?: Seed): PageStatus {
   return "brouillon";
 }
 
-export function progressOf(seed: Seed, meta: Meta) {
+export function progressOf(seed: Seed, _meta: Meta) {
   const manuscripts = seed.planches.length;
   const visual = computeVisualPages(seed).length;
-  const done = seed.planches.filter((p) => pageStatusOf(meta, p.id) === "termine").length;
-  const wip = seed.planches.filter((p) => pageStatusOf(meta, p.id) === "en_cours").length;
-  const drafts = seed.planches.filter((p) => pageStatusOf(meta, p.id) === "brouillon").length;
-  const weighted = manuscripts
-    ? seed.planches.reduce((sum, p) => sum + STATUS_WEIGHT[pageStatusOf(meta, p.id)], 0) / manuscripts
-    : 0;
+  const cases = storyCases(seed);
+  const done = cases.filter((c) => c.statut === "valide").length;
+  const wip = cases.filter((c) => c.statut === "en_cours").length;
+  const drafts = cases.filter((c) => c.statut === "brouillon").length;
+  const weighted = cases.reduce((sum, c) => sum +
+    ({ valide: 1, en_cours: 0.7, brouillon: 0.35 }[c.statut] || 0), 0);
   return {
-    n: visual,
-    visual,
-    manuscripts,
-    done,
-    wip,
-    drafts,
-    pct: Math.round(weighted * 100),
-    label: !manuscripts
-      ? "Aucune planche manuscrite"
-      : done > 0
-        ? `${done} / ${manuscripts} planches manuscrites`
-        : wip > 0
-          ? `${wip} en cours · ${manuscripts} planches manuscrites`
-          : `${drafts} brouillons · ${manuscripts} planches manuscrites`,
+    n: visual, visual, manuscripts, done, wip, drafts,
+    pct: cases.length ? Math.round(100 * weighted / cases.length) : 0,
+    label: `${done} / ${cases.length} cases validées`,
   };
 }
 

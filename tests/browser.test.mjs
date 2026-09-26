@@ -51,7 +51,7 @@ try {
     }
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "Nous, malgré nous", exact: true }).waitFor();
-    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().waitFor();
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
     assert.equal(await page.getByRole("link", { name: "Accueil", exact: true }).count(), 0);
     assert.equal(await page.getByRole("link", { name: "Projets", exact: true }).count(), 0);
     assert.equal(await page.getByRole("link", { name: "Bibliothèque", exact: true }).count(), 0);
@@ -72,7 +72,7 @@ try {
     assert.equal(await page.locator(".visual-grid").count(), 1);
     await page.goto(base + "/");
     await page.getByRole("button", { name: "Nous, malgré nous", exact: true }).click();
-    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().waitFor();
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
     assert.match(await page.getByText(/planches visuelles · 152 cases/).innerText(), /planches visuelles · 152 cases/);
     assert.ok((await page.getByRole("button", { name: /^Planche \d+$/ }).count()) > 1);
     assert.equal(await page.locator(".visual-grid").count(), 0);
@@ -100,6 +100,8 @@ try {
     await dialog.getByLabel("Titre", { exact: true }).fill("QA titre");
     await dialog.getByLabel("Mise en image", { exact: true }).fill("QA description");
     await dialog.getByLabel("Note", { exact: true }).fill("Note QA P01");
+    await dialog.getByText("Contexte éditorial de la case", { exact: true }).click();
+    await dialog.getByLabel("Instructions de la case", { exact: true }).fill("Contexte QA attaché à la case");
     await dialog.getByText("Options avancées", { exact: true }).click();
     assert.equal(await dialog.getByRole("combobox", { name: "Archiviste", exact: true }).inputValue(), "absent");
     await dialog.getByRole("combobox", { name: "Archiviste", exact: true }).selectOption("2");
@@ -121,6 +123,7 @@ try {
     const prompt = page.getByRole("dialog", { name: /Prompt/ });
     const promptValue = await prompt.locator("textarea").inputValue();
     assert.match(promptValue, /QA description/);
+    assert.match(promptValue, /Contexte QA attaché à la case/);
     assert.match(promptValue, /Case 1/);
     assert.match(promptValue, /Planche visuelle/);
     assert.match(promptValue, /Archiviste: présent, niveau 2/);
@@ -154,7 +157,7 @@ try {
     pass("case editor, image upload, visible lettering, drag, size, full-image fit and prompt");
     await waitSaved();
     await page.reload();
-    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().waitFor();
+    await page.locator('img[src="/assets/nous-malgre-nous-cover.png"]').first().evaluate((img) => img.decode());
     assert.ok((await page.getByRole("button", { name: /^Planche \d+$/ }).count()) > 1);
     await page.getByRole("button", { name: "Planche 1", exact: true }).click();
     await page.locator(".visual-grid button").first().click();
@@ -316,6 +319,20 @@ try {
     );
     assert.deepEqual(errors, []);
     pass("editable characters, guardians and rules keep full images without mobile overflow");
+    await page.getByLabel("Règle du choix", { exact: true }).fill("Blocage QA : attendre le verbatim");
+    await waitSaved();
+    await page.reload();
+    assert.equal(await page.getByLabel("Règle du choix", { exact: true }).inputValue(), "Blocage QA : attendre le verbatim");
+    await page.getByRole("button").filter({ hasText: "Blocage QA : attendre le verbatim" }).click();
+    const editorial = page.getByRole("dialog");
+    await editorial.waitFor();
+    await editorial.getByRole("button", { name: "Premier", exact: true }).click();
+    await page.getByRole("dialog", { name: "Case 1", exact: true }).waitFor();
+    await editorial.getByText("Options avancées", { exact: true }).click();
+    await editorial.getByRole("button", { name: "Assembler le prompt IA", exact: true }).click();
+    assert.ok((await page.getByRole("dialog", { name: "Prompt · Case 1", exact: true }).locator("textarea").inputValue()).includes("Blocage QA : attendre le verbatim"));
+    assert.deepEqual(errors, []);
+    pass("editorial choice persists and its coherence link follows the moved case into its prompt");
     await context.close();
   }
 } catch (error) {

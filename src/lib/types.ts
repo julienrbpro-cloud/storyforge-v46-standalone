@@ -55,6 +55,9 @@ export interface PanelCase {
   notes: string | null;
   source_verbatim: string | null;
   statut: CaseStatus | string;
+  instructions_case?: string | null;
+  date_histoire?: string | null;
+  notes_editoriales?: string[];
   layout_size?: { width: number; height: number };
   gardien_override?: Partial<Record<GuardianId, GuardianState>>;
   /** Derived 1-based index. Display only — position is the array order. */
@@ -84,6 +87,7 @@ export interface Personnage {
 }
 
 export interface Gardien {
+  note?: string;
   id: GuardianId | string;
   nom?: string;
   personnage_id?: string;
@@ -101,6 +105,7 @@ export interface EditorialRule {
 }
 
 export interface EditorialChoice {
+  case_id?: string;
   id: string;
   planche: number | string;
   case: string;
@@ -154,6 +159,7 @@ export interface MediaMeta {
 }
 
 export interface CoherenceIssue {
+  caseId?: string;
   level: "error" | "warn" | "ok";
   title: string;
   text: string;

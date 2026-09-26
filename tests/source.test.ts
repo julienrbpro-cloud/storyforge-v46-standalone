@@ -197,6 +197,6 @@ test("visual planche stats stay distinct from the manuscript count", () => {
   assert.equal(progress.visual, visual);
   assert.equal(progress.n, visual);
   assert.equal(progress.manuscripts, 29);
-  assert.match(progress.label, /29 planches manuscrites/);
+  assert.match(progress.label, /152 cases validées/);
   assert.doesNotMatch(progress.label, /13 planches manuscrites/);
 });

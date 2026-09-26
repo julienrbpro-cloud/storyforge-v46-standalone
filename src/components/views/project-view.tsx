@@ -19,23 +19,7 @@ import { progressOf, PROJECT_GENRES } from "@/lib/project";
 import { totalCases } from "@/lib/seed";
 import { caseLabel, storyCases } from "@/lib/sequence";
 import { useStudio } from "@/lib/store";
-import type { Planche } from "@/lib/types";
 import { computeVisualPages, visualPageIndexOf } from "@/lib/visual-layout";
-
-const EMPTY_PAGE: Planche = {
-  id: "",
-  numero: 0,
-  titre: "",
-  chapitre: null,
-  date_histoire: null,
-  gardien_etat: {
-    archiviste: { present: false, niveau: null },
-    armurier: { present: false, niveau: null },
-  },
-  instructions_planche: null,
-  notes_planche: null,
-  cases: [],
-};
 
 export function ProjectView() {
   const seed = useStudio((s) => s.seed);
@@ -56,9 +40,7 @@ export function ProjectView() {
   const page = pages[pageIndex];
   const prog = progressOf(seed, meta);
   const panel = selected ? cases.find((item) => item.id === selected) || null : null;
-  const editorPage = panel
-    ? seed.planches.find((item) => item.id === panel.planche_id) || EMPTY_PAGE
-    : undefined;
+
 
   useEffect(() => {
     if (!selected) return;
@@ -200,7 +182,7 @@ export function ProjectView() {
           </Button>
         </PaperSheet>
       </div>
-      {panel && editorPage ? (
+      {panel ? (
         <Dialog
           open
           onOpenChange={(open) => {
@@ -208,13 +190,13 @@ export function ProjectView() {
           }}
         >
           <DialogContent title={`Case ${caseLabel(panel, cases)}`}>
-            <CaseInspector page={editorPage} panel={panel} />
+            <CaseInspector panel={panel} />
             <Button
               variant="danger"
               className="mt-3 w-full"
               onClick={() => {
                 if (!confirm("Supprimer cette case ?")) return;
-                deleteCase(editorPage.id, panel.id);
+                deleteCase("", panel.id);
               }}
             >
               Supprimer la case

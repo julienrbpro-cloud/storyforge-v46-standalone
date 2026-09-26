@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CaseImage } from "@/components/case-image";
@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { OFFICIAL_REFS } from "@/lib/constants";
 import { pickImage } from "@/lib/files";
 import { useStudio } from "@/lib/store";
+import { allIssues } from "@/lib/coherence";
+import { caseLabel, storyCases } from "@/lib/sequence";
 import { toast } from "sonner";
 
 function officialImage(entityId: string) {
@@ -22,6 +24,8 @@ function guardianTitle(id: string) {
 }
 
 export function LibraryView() {
+  const navigate = useNavigate();
+  const setChoiceField = useStudio((s) => s.setEditorialChoiceField);
   const seed = useStudio((s) => s.seed);
   const revision = useStudio((s) => s.revision);
   const setEntityField = useStudio((s) => s.setLibraryEntityField);
@@ -32,6 +36,9 @@ export function LibraryView() {
   const addGuardian = useStudio((s) => s.addLibraryGuardian);
   const addRule = useStudio((s) => s.addEditorialRule);
   void revision;
+  const issues = allIssues(seed);
+  const ordered = storyCases(seed);
+  const labels = new Map(ordered.map((c) => [c.id, caseLabel(c, ordered)]));
 
   async function chooseImage(kind: "personnage" | "gardien", id: string) {
     try {
@@ -122,6 +129,9 @@ export function LibraryView() {
                         />
                       </Field>
                       <Field label="Description">
+                        <Textarea value={guardian.note || ""} onChange={(e) => setEntityField("gardien", guardian.id, "note", e.target.value)} />
+                      </Field>
+                      <Field label="Fonction protectrice">
                         <Textarea
                           value={guardian.fonction_protectrice || ""}
                           onChange={(e) =>
@@ -186,6 +196,26 @@ export function LibraryView() {
             <Button variant="paper" className="w-full" onClick={addRule}>
               Ajouter une règle
             </Button>
+            {(seed.choix_editoriaux_ouverts || []).map((choice) => (
+              <article key={choice.id} className="space-y-2 rounded-xl border border-paper-line bg-paper p-3">
+                <h4 className="text-xs font-bold">Choix éditorial · {choice.case_id && labels.has(choice.case_id)
+                  ? `case ${labels.get(choice.case_id!)}`
+                  : `repère manuscrit ${choice.planche} / ${choice.case}`}</h4>
+                <Field label="Description du choix"><Textarea value={choice.description || ""} onChange={(e) => setChoiceField(choice.id, "description", e.target.value)} /></Field>
+                <Field label="Règle du choix"><Textarea value={choice.regle} onChange={(e) => setChoiceField(choice.id, "regle", e.target.value)} /></Field>
+              </article>
+            ))}
+          </section>
+          <section className="mt-8 space-y-3">
+            <h3 className="font-display text-xl">Cohérence</h3>
+            {issues.length ? issues.map((issue, i) => (
+              <button key={i} type="button" disabled={!issue.caseId}
+                className="block w-full rounded-xl border border-paper-line bg-paper p-3 text-left text-sm"
+                onClick={() => { useStudio.getState().setSelectedCase(issue.caseId!); void navigate({ to: "/projet" }); }}>
+                <b>{issue.level === "error" ? "Erreur" : "À vérifier"} · {issue.title}</b>
+                <p>{issue.text}</p>
+              </button>
+            )) : <p className="text-sm">Aucune alerte de cohérence.</p>}
           </section>
         </PaperSheet>
       </div>

@@ -1,10 +1,10 @@
-import type { GuardianId, GuardianState, PanelCase, Planche, Seed } from "./types";
+import type { GuardianId, GuardianState, Meta, PanelCase, Planche, Seed } from "./types";
 
 const GUARDIAN_IDS: GuardianId[] = ["archiviste", "armurier"];
 
 /** The persisted story order. Visual planches are not stored here. */
 export function storyCases(seed: Seed): PanelCase[] {
-  if (Array.isArray(seed.cases) && seed.cases.length) return seed.cases;
+  if (Array.isArray(seed.cases)) return seed.cases;
   const cases: PanelCase[] = [];
   for (const planche of seed.planches || []) {
     for (const panel of planche.cases || []) cases.push(panel);
@@ -38,9 +38,7 @@ export function syncStoryOrder(seed: Seed) {
 
 /** Cases whose manuscript origin is this planche. Not a visual page. */
 export function casesForPlanche(seed: Seed, plancheId: string) {
-  const tagged = storyCases(seed).filter((panel) => panel.planche_id === plancheId);
-  if (tagged.length) return tagged;
-  return seed.planches.find((planche) => planche.id === plancheId)?.cases || [];
+  return storyCases(seed).filter((panel) => panel.planche_id === plancheId);
 }
 
 /**
@@ -50,7 +48,7 @@ export function casesForPlanche(seed: Seed, plancheId: string) {
  */
 export function migrateSequence(seed: Seed) {
   const incoming = Array.isArray(seed.cases) ? seed.cases.filter((panel) => panel && typeof panel === "object") : [];
-  const flattened = !incoming.length;
+  const flattened = !Array.isArray(seed.cases);
   if (flattened) {
     const flat: PanelCase[] = [];
     for (const planche of seed.planches || []) {
@@ -59,16 +57,51 @@ export function migrateSequence(seed: Seed) {
         flat.push(panel);
       }
     }
+    const legacyOrder = (seed as Seed & { ordre_cases?: string[] }).ordre_cases;
+    if (legacyOrder?.length) {
+      const rank = new Map(legacyOrder.map((id, i) => [id, i]));
+      flat.sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity));
+    }
     seed.cases = flat;
   } else {
     seed.cases = incoming;
   }
+  // Sol stored provenance under different names and regenerated numero.
+  for (const panel of seed.cases || []) {
+    const legacy = panel as PanelCase & { source_planche_id?: string; numero_source?: string };
+    if (legacy.source_planche_id) {
+      if (panel.source_label !== "Case locale" || legacy.numero_source != null)
+        panel.planche_id ??= legacy.source_planche_id;
+      panel.numero = legacy.numero_source ?? "";
+    }
+    delete legacy.source_planche_id;
+    delete legacy.numero_source;
+  }
+  delete (seed as Seed & { ordre_cases?: string[] }).ordre_cases;
   if (flattened || seed._meta?.gardiens_sur_cases !== true) {
     for (const panel of seed.cases || []) {
       const origin = (seed.planches || []).find((planche) => planche.id === panel.planche_id);
       copyGuardianState(panel, origin);
     }
     seed._meta = { ...(seed._meta || {}), gardiens_sur_cases: true };
+  }
+  // Snapshot editorial context once; current case fields never inherit live page data.
+  if (seed._meta?.contexte_sur_cases !== true) {
+    for (const panel of seed.cases || []) {
+      const origin = seed.planches.find((p) => p.id === panel.planche_id);
+      if (!origin) continue;
+      panel.instructions_case ??= origin.instructions_planche;
+      panel.date_histoire ??= origin.date_histoire;
+      panel.notes_editoriales ??= [...(origin.notes_planche || [])];
+    }
+    seed._meta = { ...seed._meta, contexte_sur_cases: true };
+  }
+  for (const choice of seed.choix_editoriaux_ouverts || []) {
+    if (choice.case_id) continue;
+    const panel = (seed.cases || []).find((c) => c.numero !== "" &&
+      String(c.numero) === String(choice.case) &&
+      String(seed.planches.find((p) => p.id === c.planche_id)?.numero) === String(choice.planche));
+    if (panel) choice.case_id = panel.id;
   }
   for (const planche of seed.planches || []) planche.cases = [];
   for (const panel of seed.cases || []) {
@@ -99,6 +132,7 @@ function cloneGuardian(state: GuardianState): GuardianState {
 }
 
 function relocate(cases: PanelCase[], from: number, to: number) {
+  if (!Number.isInteger(to)) return false;
   const target = Math.max(0, Math.min(to, cases.length - 1));
   if (from < 0 || target === from) return false;
   const [panel] = cases.splice(from, 1);
@@ -134,4 +168,14 @@ export function moveCaseBy(seed: Seed, caseId: string, dir: -1 | 1) {
   const cases = seed.cases || [];
   const from = cases.findIndex((panel) => panel.id === caseId);
   return moveCaseToIndex(seed, caseId, from + dir);
+}
+
+/** Preserve historical production notes without retaining a live page dependency. */
+export function migrateProductionNotes(seed: Seed, meta: Meta) {
+  if (seed._meta?.notes_production_sur_cases === true) return;
+  for (const c of storyCases(seed)) {
+    const note = c.planche_id ? meta.notes[c.planche_id] : undefined;
+    if (note) c.notes = [c.notes, note].filter(Boolean).join("\n\n");
+  }
+  seed._meta = { ...seed._meta, notes_production_sur_cases: true };
 }

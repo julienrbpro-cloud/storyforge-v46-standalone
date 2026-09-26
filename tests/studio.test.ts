@@ -273,11 +273,11 @@ test("case guardian overrides do not produce a false absent-page error", () => {
   );
 });
 
-test("editorial restrictions follow original case identity after page reordering", () => {
+test("editorial restrictions follow original case identity after global case reordering", () => {
   const s = fresh();
   const p = s.seed.planches.find((page) => page.id === "P16")!;
   const c = storyCases(s.seed).find((panel) => panel.planche_id === "P16" && panel.numero === "2A")!;
-  s.movePage(p.id, 1);
+  s.moveCaseTo(c.id, 0);
   assert.equal(choiceFor(s.seed, p, c)?.bloque_generation_du_texte, true);
 });
 
