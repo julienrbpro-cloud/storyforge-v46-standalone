@@ -11,6 +11,7 @@ import { printStoryboard } from "@/lib/print";
 import { pickJson } from "@/lib/files";
 import { toast } from "sonner";
 import { createSession } from "@/lib/session";
+import { CloudSyncPanel } from "@/components/cloud-sync-panel";
 
 export function DataView() {
   const seed = useStudio((s) => s.seed);
@@ -61,6 +62,8 @@ export function DataView() {
             {idbImageCount(seed) ? ` dont ${idbImageCount(seed)} dans ce navigateur` : ""}.
           </p>
         </div>
+
+        <CloudSyncPanel />
 
         <Row
           title="Export du projet"
