@@ -5,6 +5,7 @@ import { cloudLink, cloudSaveActiveProject, cloudVerifyCode } from "../src/lib/c
 import { useStudio } from "../src/lib/store";
 import { SEED_OFFICIEL, normalizeSeed, emptyMeta } from "../src/lib/seed";
 import { dbPut, dbReplace } from "../src/lib/media";
+import { LS_SEED } from "../src/lib/constants";
 
 class MemoryStorage {
   private contents = new Map<string, string>();
@@ -55,7 +56,7 @@ test("cloud backup uploads images, preserves local data and rejects stale revisi
     assert.equal(snapshot.media.length, 1);
     assert.equal(snapshot.media[0].id, "unit-test-photo");
     assert.equal(snapshot.seed.personnages[0].image, "idb://unit-test-photo");
-    assert.ok(localStorage.getItem("storyforge_v46_seed") === null || localStorage.length !== 0);
+    assert.ok(localStorage.getItem(LS_SEED), "Local manuscript must remain saved");
     await cloudSaveActiveProject();
     assert.equal(cloudLink("original")?.revision, 2);
     assert.equal(requests.filter(x => x.url.includes("/storage/v1/object/")).length, 1,
