@@ -33,6 +33,11 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Regenerate patched lockfile for review
+        run: |
+          npm install @tanstack/react-start@1.168.60 --save-exact --package-lock-only --ignore-scripts --no-audit --no-fund
+          git diff -- package.json package-lock.json
+
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
