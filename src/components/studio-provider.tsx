@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useStudio } from "@/lib/store";
 import { computeVisualPages } from "@/lib/visual-layout";
+import { CloudSyncAgent } from "@/components/cloud-sync-agent";
 
 export function StudioProvider({ children }: { children: ReactNode }) {
   const ready = useStudio((s) => s.ready);
@@ -58,5 +59,5 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return <>{children}</>;
+  return <><CloudSyncAgent />{children}</>;
 }
