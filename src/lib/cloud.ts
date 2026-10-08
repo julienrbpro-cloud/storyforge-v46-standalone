@@ -11,7 +11,7 @@ const UPLOADS_KEY = "storyforge.cloud.uploads.v1";
 export const CLOUD_EVENT = "storyforge:cloud-changed";
 
 type AuthTokens = { access_token: string; refresh_token: string; expires_at: number };
-type Link = { id: string; revision: number };
+type Link = { id: string; revision: number; ownerId?: string };
 type MediaManifest = Omit<MediaRecord, "blob"> & { storage_path: string };
 type CloudSnapshot = {
   format: "storyforge-cloud-v1";
@@ -33,13 +33,13 @@ function storageRead<T>(key: string, fallback: T): T {
 }
 function sessionRead(): AuthTokens | null {
   try {
-    const raw = sessionStorage.getItem(AUTH_KEY);
+    const raw = localStorage.getItem(AUTH_KEY);
     return raw ? JSON.parse(raw) as AuthTokens : null;
   } catch { return null; }
 }
 function sessionWrite(tokens: AuthTokens | null) {
-  if (tokens) sessionStorage.setItem(AUTH_KEY, JSON.stringify(tokens));
-  else sessionStorage.removeItem(AUTH_KEY);
+  if (tokens) localStorage.setItem(AUTH_KEY, JSON.stringify(tokens));
+  else localStorage.removeItem(AUTH_KEY);
   announce();
 }
 function saveTokens(response: { access_token: string; refresh_token: string; expires_in?: number; expires_at?: number }) {
@@ -182,6 +182,7 @@ async function saveActiveProject() {
   }
   const user = await cloudUser();
   const previous = cloudLink(localId);
+  if (previous?.ownerId && previous.ownerId !== user.id) throw new Error("Ce projet est lié à un autre compte cloud.");
   const cloudId = previous?.id || crypto.randomUUID();
   const media = await uploadMedia(user.id, cloudId, records);
   const snapshot: CloudSnapshot = { format: "storyforge-cloud-v1", seed, meta, media_meta, media };
@@ -192,7 +193,7 @@ async function saveActiveProject() {
       body: JSON.stringify({ id: cloudId, title, snapshot }),
     }) as Array<{ id: string; revision: number }>;
     if (!rows?.[0]) throw new Error("La sauvegarde cloud n'a pas été confirmée.");
-    saveLink(localId, rows[0]);
+    saveLink(localId, { ...rows[0], ownerId: user.id });
   } else {
     const rows = await rest("storyforge_projects?id=eq." + encodeURIComponent(previous.id) +
       "&revision=eq." + previous.revision + "&select=id,revision", {
@@ -244,7 +245,7 @@ export async function cloudRestoreProject(cloudId: string) {
     const session = { seed: snap.seed, meta: snap.meta, media_meta: snap.media_meta, media };
     const localId = useStudio.getState().activeProjectId;
     await useStudio.getState().importSessionJson(session);
-    saveLink(localId, { id: project.id, revision: project.revision });
+    saveLink(localId, { id: project.id, revision: project.revision, ownerId: user.id });
   } finally {
     restoring = false;
     announce();
