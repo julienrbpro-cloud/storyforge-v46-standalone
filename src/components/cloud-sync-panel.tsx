@@ -12,12 +12,12 @@ export function CloudSyncPanel() {
   const activeId = useStudio((s) => s.activeProjectId);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  const [signedIn, setSignedIn] = useState(cloudIsSignedIn());
+  const [signedIn, setSignedIn] = useState(false);
   const [account, setAccount] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [projects, setProjects] = useState<CloudProject[]>([]);
-  const [linked, setLinked] = useState(() => cloudLink(activeId));
+  const [linked, setLinked] = useState<ReturnType<typeof cloudLink>>(null);
 
   const refresh = useCallback(async () => {
     setSignedIn(cloudIsSignedIn());
