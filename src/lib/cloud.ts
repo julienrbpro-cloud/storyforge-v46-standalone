@@ -1,4 +1,4 @@
-import { activeProjectMedia, blobToDataUrl, dbAll, imageExt, referencedMediaIds } from "./media";
+import { blobToDataUrl, dbAll, imageExt, referencedMediaIds } from "./media";
 import { useStudio } from "./store";
 import type { MediaRecord } from "./media";
 
@@ -134,6 +134,11 @@ function saveUpload(projectId: string, mediaId: string, fingerprint: string) {
   localStorage.setItem(UPLOADS_KEY, JSON.stringify(cache));
 }
 function encodePath(path: string) { return path.split("/").map(encodeURIComponent).join("/"); }
+/** A content hash detects edits even if the image keeps its id, size and MIME type. */
+async function mediaFingerprint(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+}
 async function rest(path: string, init: RequestInit = {}) {
   return request("/rest/v1/" + path, {
     ...init, headers: { "Content-Type": "application/json", ...init.headers },
@@ -144,7 +149,7 @@ async function uploadMedia(userId: string, projectId: string, records: MediaReco
   const entries: MediaManifest[] = [];
   for (const record of records) {
     const storagePath = userId + "/" + projectId + "/" + record.id + "." + imageExt(record.mime, record.name);
-    const fingerprint = record.blob.size + ":" + record.blob.type + ":" + (record.createdAt || "");
+    const fingerprint = await mediaFingerprint(record.blob);
     if (uploaded[record.id] !== fingerprint) {
       const token = await accessToken();
       await request("/storage/v1/object/" + encodeURIComponent(BUCKET) + "/" + encodePath(storagePath), {
@@ -175,9 +180,10 @@ async function saveActiveProject() {
   const seed = structuredClone(state.seed);
   const meta = structuredClone(state.meta);
   const media_meta = structuredClone(state.mediaMeta);
-  const records = activeProjectMedia(await dbAll(), seed);
-  const available = new Set(records.map(r => r.id));
-  for (const id of referencedMediaIds(seed)) {
+  const referenced = referencedMediaIds(seed);
+  const records = (await dbAll()).filter(record => referenced.has(record.id));
+  const available = new Set(records.map(record => record.id));
+  for (const id of referenced) {
     if (!available.has(id)) throw new Error("Image locale manquante (" + id + "). Le cloud n'a pas été modifié.");
   }
   const user = await cloudUser();
@@ -201,7 +207,7 @@ async function saveActiveProject() {
       body: JSON.stringify({ title, snapshot, revision: previous.revision + 1, updated_at: new Date().toISOString() }),
     }) as Array<{ id: string; revision: number }>;
     if (!rows?.[0]) throw new Error("Conflit : le projet cloud a changé sur un autre appareil. Charge sa version avant de réessayer.");
-    saveLink(localId, rows[0]);
+    saveLink(localId, { ...rows[0], ownerId: user.id });
   }
   announce();
 }
