@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - ux-hybrid-final
+      - feat/supabase-sync
   pull_request:
     branches:
       - main
