@@ -83,6 +83,25 @@ async function accessToken(): Promise<string> {
     throw error;
   }
 }
+/** Password setup uses the existing verified Supabase session; no email is sent. */
+export async function cloudSetPassword(password: string): Promise<void> {
+  if (password.length < 6) throw new Error("Utilise au moins 6 caractères.");
+  await request("/auth/v1/user", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  }, await accessToken());
+}
+
+/** Sign in across browsers without email links or verification codes. */
+export async function cloudSignInWithPassword(email: string, password: string): Promise<void> {
+  const tokens = await request("/auth/v1/token?grant_type=password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim(), password }),
+  }) as { access_token: string; refresh_token: string; expires_in?: number; expires_at?: number };
+  saveTokens(tokens);
+}
 export function cloudIsSignedIn() { return !!sessionRead(); }
 export function cloudSignOut() { sessionWrite(null); }
 export async function cloudSendLogin(email: string) {
