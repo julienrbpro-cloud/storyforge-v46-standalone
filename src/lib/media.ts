@@ -129,6 +129,20 @@ export async function dbReplace(records: MediaRecord[]) {
   revokeAllMediaUrls();
 }
 
+/** Cloud downloads add media without deleting another project's working images. */
+export async function dbMerge(records: MediaRecord[]) {
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.oncomplete = () => resolve();
+    tx.onerror = tx.onabort = () => reject(tx.error || new Error("Récupération des images interrompue"));
+    try {
+      for (const record of records) tx.objectStore(STORE).put(record);
+    } catch (error) { tx.abort(); reject(error); }
+  });
+  for (const record of records) revokeMediaUrl(record.id);
+}
+
 export async function mediaUrl(id: string) {
   if (urlCache.has(id)) return urlCache.get(id)!;
   const rec = await dbGet(id);

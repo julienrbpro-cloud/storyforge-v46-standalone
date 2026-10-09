@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { OFFICIAL_REFS } from "@/lib/constants";
+import { SEED_OFFICIEL } from "@/lib/seed";
 import { pickImage } from "@/lib/files";
 import { useStudio } from "@/lib/store";
 import { allIssues } from "@/lib/coherence";
@@ -32,6 +33,8 @@ export function LibraryView() {
   const setRuleField = useStudio((s) => s.setEditorialRuleField);
   const replaceLibraryImage = useStudio((s) => s.replaceLibraryImage);
   const activeProjectId = useStudio((s) => s.activeProjectId);
+  const seedId = seed._meta?.seed_id;
+  const hasOfficialReferences = activeProjectId === "original" || (!!seedId && seedId === SEED_OFFICIEL._meta?.seed_id);
   const addPerson = useStudio((s) => s.addLibraryPerson);
   const addGuardian = useStudio((s) => s.addLibraryGuardian);
   const addRule = useStudio((s) => s.addEditorialRule);
@@ -66,7 +69,7 @@ export function LibraryView() {
             <h3 className="font-display text-xl">Personnages</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               {(seed.personnages || []).map((person) => {
-                const image = person.image || (activeProjectId === "original" ? officialImage(person.id) : null);
+                const image = person.image || (hasOfficialReferences ? officialImage(person.id) : null);
                 return (
                   <article key={person.id} className="rounded-xl border border-paper-line bg-paper">
                     <ReferencePortrait
@@ -106,7 +109,7 @@ export function LibraryView() {
             <h3 className="font-display text-xl">Gardiens</h3>
             <div className="grid gap-3 sm:grid-cols-2">
               {(seed.gardiens || []).map((guardian) => {
-                const image = guardian.image || (activeProjectId === "original" ? officialImage(guardian.id) : null);
+                const image = guardian.image || (hasOfficialReferences ? officialImage(guardian.id) : null);
                 return (
                   <article key={guardian.id} className="rounded-xl border border-paper-line bg-paper">
                     <ReferencePortrait

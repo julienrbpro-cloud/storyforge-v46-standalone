@@ -10,7 +10,7 @@ import {
   CASE_STATUSES,
 } from "./constants";
 import { clone, emptyMeta, normalizeMeta, normalizeSeed, parseSeed, SEED_OFFICIEL } from "./seed";
-import { dbAll, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
+import { dbAll, dbMerge, dbReplace, otherProjectMediaIds, putCaseImage, putImage } from "./media";
 import { parseSession } from "./session";
 import { uid } from "./utils";
 import { migrateProductionNotes, moveCaseBy, moveCaseRelative, moveCaseToIndex, storyCases, syncStoryOrder } from "./sequence";
@@ -91,6 +91,7 @@ interface StudioState {
   resetWorkingSeed: () => void;
   importSeedJson: (data: unknown) => void;
   importSessionJson: (data: unknown) => Promise<void>;
+  importCloudSession: (data: unknown, id: string, expected: { activeId: string; revision: number; keepExisting?: boolean; keepView?: boolean }) => Promise<void>;
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
@@ -617,6 +618,48 @@ export const useStudio = create<StudioState>((set, get) => {
       set({ seed, meta, selectedCaseId: null, visualPageIndex: 0, recoveryRequired: false });
       bump();
       toast.success("Seed de travail importé");
+    },
+
+    async importCloudSession(data, id, expected) {
+      const restored = parseSession(data);
+      // Stage media first. No manuscript or archive is replaced if a download/write fails.
+      await dbMerge(restored.records);
+      if (get().activeProjectId !== expected.activeId || get().revision !== expected.revision)
+        throw new Error("Tu as modifié le projet pendant sa récupération. Tes modifications sont conservées ; réessaie l’ouverture.");
+      get().persistNow();
+      if (get().saveState === "error") throw new Error("Sauvegarde locale impossible. Tes projets n’ont pas été remplacés.");
+      const archive = readLocal<ProjectArchive>(LS_PROJECTS, { activeId: get().activeProjectId, projects: [] });
+      const projects = [...archive.projects];
+      const index = projects.findIndex((p) => p.id === id);
+      if (index >= 0 && expected.keepExisting) {
+        const copy = clone(projects[index]);
+        copy.id = uid("project");
+        copy.seed.projet.titre += " — copie locale";
+        projects.push(copy);
+      }
+      const record = { id, ...restored };
+      const saved = { id: record.id, seed: record.seed, meta: record.meta, mediaMeta: record.mediaMeta };
+      if (index >= 0) projects[index] = saved;
+      else projects.push(saved);
+      const previous = captureRawLocalSnapshot();
+      const previousArchive = localStorage.getItem(LS_PROJECTS);
+      try {
+        saveLocalSnapshot(restored.seed, restored.meta, restored.mediaMeta);
+        localStorage.setItem(LS_PROJECTS, JSON.stringify({ activeId: id, projects }));
+      } catch (error) {
+        restoreRawLocalSnapshot(previous);
+        if (previousArchive == null) localStorage.removeItem(LS_PROJECTS);
+        else localStorage.setItem(LS_PROJECTS, previousArchive);
+        throw error;
+      }
+      if (persistTimer) clearTimeout(persistTimer);
+      persistTimer = null;
+      set({ seed: restored.seed, meta: restored.meta, mediaMeta: restored.mediaMeta,
+        activeProjectId: id, projects: projects.map((p) => ({ id: p.id, title: p.seed.projet.titre })),
+        selectedCaseId: expected.keepView && storyCases(restored.seed).some(c => c.id === get().selectedCaseId) ? get().selectedCaseId : null,
+        visualPageIndex: expected.keepView ? Math.min(get().visualPageIndex, Math.max(0, computeVisualPages(restored.seed).length - 1)) : 0,
+        recoveryRequired: false,
+        revision: get().revision + 1, saveState: "saved" });
     },
 
     async importSessionJson(data) {

@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { useStudio } from "@/lib/store";
+import { cloudLink } from "@/lib/cloud";
 
 export function ProjectsView() {
   const ready = useStudio((s) => s.ready);
@@ -22,10 +23,14 @@ export function ProjectsView() {
   return (
     <AppShell showPlus title={<div className="font-display text-lg">Projets</div>}>
       <div className="view-enter space-y-2 p-4">
+        <button type="button" className="rounded-full border border-line bg-panel px-4 py-2 text-sm"
+          onClick={() => void navigate({ to: "/donnees" })}>Mes sauvegardes cloud</button>
         {projects.map((project) => (
           <button
             key={project.id}
             type="button"
+            aria-label={project.title}
+            aria-describedby={"project-location-" + project.id}
             className="flex w-full items-center gap-3 rounded-2xl border border-line bg-panel p-4 text-left transition-colors hover:border-accent/40"
             onClick={() => {
               openProject(project.id);
@@ -41,6 +46,9 @@ export function ProjectsView() {
             ) : null}
             <div className="min-w-0 flex-1">
               <b className="block truncate font-display text-xl">{project.title}</b>
+              <span id={"project-location-" + project.id} className="block text-xs text-muted">
+                {cloudLink(project.id) ? "Sauvegarde cloud" : "Sur cet appareil"}
+              </span>
               {project.id === activeProjectId ? <span className="text-xs text-muted" aria-hidden="true">Ouvert</span> : null}
             </div>
           </button>

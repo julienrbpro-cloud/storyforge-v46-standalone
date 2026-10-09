@@ -21,6 +21,7 @@ test("password sign-in and setup need no OTP, email delivery or redirect", async
       return Response.json({ access_token: "token", refresh_token: "refresh", expires_in: 3600 });
     if (url.endsWith("/auth/v1/user") && options?.method === "PUT")
       return Response.json({ id: "test-user" });
+    if (url.includes("/auth/v1/logout")) return new Response(null, { status: 204 });
     throw new Error("Unexpected Auth endpoint");
   };
   try {
@@ -35,7 +36,7 @@ test("password sign-in and setup need no OTP, email delivery or redirect", async
     await assert.rejects(() => cloudSetPassword("123"), /6 caractères/);
     assert.equal(requests.length, 2);
     assert.ok(requests.every(r => !r.url.includes("/otp") && !r.url.includes("/verify")));
-    cloudSignOut();
+    await cloudSignOut();
     assert.equal(cloudIsSignedIn(), false);
   } finally {
     globalThis.fetch = previous;

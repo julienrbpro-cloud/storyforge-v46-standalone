@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  CLOUD_EVENT, cloudConsumeLoginRedirect, cloudIsSignedIn, cloudLink,
-  cloudListProjects, cloudRestoreProject, cloudSaveActiveProject,
-  cloudSetPassword, cloudSignInWithPassword, cloudSignOut, cloudSyncInProgress, cloudUser,
-  type CloudProject,
+  CLOUD_EVENT, cloudIsSignedIn, cloudLink, cloudListProjects, cloudRestoreProject,
+  cloudSaveActiveProject, cloudSaveActiveProjectAsCopy, cloudSetPassword,
+  cloudSignInWithPassword, cloudSignOut, cloudStatus, cloudSyncInProgress, cloudUser,
+  type CloudProject, type CloudStatus,
 } from "@/lib/cloud";
 import { useStudio } from "@/lib/store";
 
@@ -12,35 +12,48 @@ export function CloudSyncPanel() {
   const activeId = useStudio((s) => s.activeProjectId);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
   const [account, setAccount] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [projects, setProjects] = useState<CloudProject[]>([]);
   const [linked, setLinked] = useState<ReturnType<typeof cloudLink>>(null);
+  const [sync, setSync] = useState<CloudStatus>({ state: "idle", message: "" });
+  const refreshVersion = useRef(0);
+  const invalidateRefresh = useCallback(() => { refreshVersion.current++; }, []);
 
   const refresh = useCallback(async () => {
-    setSignedIn(cloudIsSignedIn());
-    setLinked(cloudLink(activeId));
-    if (!cloudIsSignedIn()) { setAccount(""); setProjects([]); return; }
+    const version = ++refreshVersion.current;
+    const connected = cloudIsSignedIn();
+    setSignedIn(connected); setLinked(cloudLink(activeId)); setSync(cloudStatus(activeId));
+    if (!connected) { setAccount(""); setProjects([]); return; }
     try {
-      const user = await cloudUser();
-      setAccount(user.email || user.id);
-      const rows = await cloudListProjects();
-      setProjects(rows);
+      const [user, rows] = await Promise.all([cloudUser(), cloudListProjects()]);
+      if (version !== refreshVersion.current || !cloudIsSignedIn()) return;
+      setAccount(user.email || "Compte StoryForge"); setProjects(rows);
     } catch (error) {
-      setMessage((error as Error).message);
+      if (version === refreshVersion.current) setMessage((error as Error).message);
     }
   }, [activeId]);
 
   useEffect(() => {
-    try { cloudConsumeLoginRedirect(); }
-    catch (error) { setMessage((error as Error).message); }
+    try { setEmail(localStorage.getItem("storyforge.cloud.email.v1") || ""); } catch { /* Optional convenience. */ }
     void refresh();
-    const update = () => { setLinked(cloudLink(activeId)); setSignedIn(cloudIsSignedIn()); };
+    let last = JSON.stringify(cloudLink(activeId));
+    let connected = cloudIsSignedIn();
+    const update = () => {
+      const nextConnected = cloudIsSignedIn(), next = cloudLink(activeId);
+      setLinked(next); setSignedIn(nextConnected); setSync(cloudStatus(activeId));
+      if (nextConnected !== connected || JSON.stringify(next) !== last) void refresh();
+      last = JSON.stringify(next); connected = nextConnected;
+    };
     window.addEventListener(CLOUD_EVENT, update);
-    return () => window.removeEventListener(CLOUD_EVENT, update);
-  }, [activeId, refresh]);
+    window.addEventListener("storage", update);
+    return () => { invalidateRefresh(); window.removeEventListener(CLOUD_EVENT, update); window.removeEventListener("storage", update); };
+  }, [activeId, refresh, invalidateRefresh]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true); setMessage("");
@@ -48,94 +61,87 @@ export function CloudSyncPanel() {
     catch (error) { setMessage((error as Error).message); toast.error((error as Error).message); }
     finally { setBusy(false); }
   }
+  const working = busy || cloudSyncInProgress();
+  const inputClass = "w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream";
+  const buttonClass = "rounded-full border border-line bg-panel-2 px-3 py-2 text-xs font-bold disabled:opacity-40";
 
   return (
-    <section className="rounded-2xl border border-line bg-panel p-4">
-      <h5 className="mb-1 text-xs font-bold tracking-wide text-accent-2 uppercase">Sauvegarde cloud · Supabase</h5>
-      <p className="mb-3 text-[12px] leading-relaxed text-cream-2">
-        Facultative. Les données continuent d'être sauvegardées sur cet appareil. Les projets cloud sont privés.
-      </p>
+    <section className="rounded-2xl border border-line bg-panel p-4" aria-label="Sauvegarde cloud">
+      <h5 className="mb-1 text-xs font-bold tracking-wide text-accent-2 uppercase">Mes sauvegardes cloud</h5>
+      <p className="mb-3 text-[12px] leading-relaxed text-cream-2">Tes projets sont privés. Une copie reste enregistrée sur cet appareil.</p>
       {!signedIn ? (
-        <div className="space-y-2">
-          <label className="block text-xs text-cream-2" htmlFor="cloud-email">Ton adresse courriel</label>
-          <input id="cloud-email" type="email" autoComplete="email" value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
-            placeholder="Courriel pour te connecter" />
-          <label className="block text-xs text-cream-2" htmlFor="cloud-password-login">Mot de passe</label>
-          <input id="cloud-password-login" type="password" autoComplete="current-password" value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
-            placeholder="Ton mot de passe" />
-          <button type="button" disabled={busy || !email.includes("@") || !password}
-            className="rounded-full border border-line bg-panel-2 px-3 py-2 text-xs font-bold disabled:opacity-40"
-            onClick={() => void run(async () => {
-              await cloudSignInWithPassword(email, password);
-              setPassword("");
-              toast.success("Connecté à tes projets cloud");
-            })}>Se connecter</button>
-          <p className="text-[12px] leading-relaxed text-cream-2">
-            Pas de courriel ni de code à recevoir. Pour la première connexion,
-            crée ton mot de passe depuis le navigateur déjà connecté.
-          </p>
-        </div>
+        <form className="space-y-2" onSubmit={(e) => {
+          e.preventDefault();
+          if (busy) return;
+          void run(async () => {
+            await cloudSignInWithPassword(email, password);
+            localStorage.setItem("storyforge.cloud.email.v1", email.trim());
+            setPassword(""); toast.success("Connecté à tes projets StoryForge");
+          });
+        }}>
+          <label className="block text-xs text-cream-2" htmlFor="cloud-email">Courriel StoryForge</label>
+          <input id="cloud-email" type="email" autoComplete="username" required value={email}
+            onChange={(e) => setEmail(e.target.value)} className={inputClass} placeholder="ton@courriel.com" />
+          <label className="block text-xs text-cream-2" htmlFor="cloud-password-login">Mot de passe StoryForge</label>
+          <input id="cloud-password-login" type={showPassword ? "text" : "password"} autoComplete="current-password" required value={password}
+            onChange={(e) => setPassword(e.target.value)} className={inputClass} placeholder="Ton mot de passe StoryForge" />
+          <label className="flex items-center gap-2 text-xs text-cream-2"><input type="checkbox" checked={showPassword} onChange={(e) => setShowPassword(e.target.checked)} />Afficher le mot de passe</label>
+          <button type="submit" disabled={busy || !email || !password} className={buttonClass}>{busy ? "Connexion…" : "Se connecter"}</button>
+          <p className="text-[12px] leading-relaxed text-cream-2">Ce compte est distinct de ta connexion Google à ChatGPT. Aucun lien ni code à recevoir par courriel.</p>
+        </form>
       ) : (
         <div className="space-y-3 text-xs">
           <div className="flex items-center justify-between gap-2">
-            <span className="min-w-0 truncate text-cream-2">{account || "Connecté à Supabase"}</span>
-            <button type="button" className="shrink-0 rounded-full border border-line px-3 py-2"
-              onClick={() => { cloudSignOut(); void refresh(); }}>Déconnexion</button>
+            <span className="min-w-0 truncate text-cream-2">{account || "Compte StoryForge connecté"}</span>
+            <button type="button" disabled={busy} className={buttonClass} onClick={() => void run(() => cloudSignOut())}>Déconnexion</button>
           </div>
-          <div className="space-y-2 rounded-lg border border-line p-3">
-            <p className="font-bold">Accès simple depuis tous tes navigateurs</p>
-            <p className="text-cream-2">Choisis ton mot de passe une seule fois ici. Dans l'autre navigateur, utilise simplement ton courriel et ce mot de passe. Aucun code à recevoir.</p>
-            <label className="block text-cream-2" htmlFor="cloud-password-create">Créer ou changer mon mot de passe</label>
-            <input id="cloud-password-create" type="password" autoComplete="new-password" value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
-              placeholder="Au moins 6 caractères" />
-            <button type="button" disabled={busy || password.length < 6}
-              className="rounded-full border border-line bg-panel-2 px-3 py-2 font-bold disabled:opacity-40"
-              onClick={() => void run(async () => {
-                await cloudSetPassword(password);
-                setPassword("");
-                setMessage("Mot de passe enregistré. Tu peux ouvrir StoryForge dans ton autre navigateur et te connecter directement.");
-                toast.success("Mot de passe enregistré");
-              })}>Enregistrer mon mot de passe</button>
-          </div>
-          <p className="text-cream-2">
-            {linked ? "Synchronisation automatique activée pour le projet ouvert." :
-              "Projet local uniquement. La première sauvegarde cloud active la synchronisation automatique."}
-          </p>
-          <button type="button" disabled={busy || cloudSyncInProgress()}
-            className="rounded-full border border-line bg-panel-2 px-3 py-2 font-bold disabled:opacity-40"
-            onClick={() => void run(async () => {
-              await cloudSaveActiveProject();
-              toast.success("Projet et images sauvegardés dans Supabase");
-            })}>Sauvegarder maintenant dans le cloud</button>
+          <p role="status" className="text-cream-2">{sync.message || (linked ? "Synchronisation automatique activée" : "Sauvegarde ce projet une première fois pour activer sa synchronisation.")}</p>
+          <button type="button" disabled={working} className={buttonClass} onClick={() => void run(async () => {
+            await cloudSaveActiveProject(); toast.success("Projet et images à jour dans le cloud");
+          })}>Sauvegarder maintenant</button>
+          {sync.state === "conflict" ? (
+            <button type="button" disabled={working} className={buttonClass} onClick={() => void run(async () => {
+              await cloudSaveActiveProjectAsCopy(); toast.success("Ta version est sauvegardée séparément. L’autre version est conservée.");
+            })}>Sauvegarder ma version comme autre projet</button>
+          ) : null}
           <div className="space-y-2 border-t border-line pt-3">
-            <p className="font-bold">Mes projets cloud</p>
-            <button type="button" disabled={busy} className="rounded-full border border-line px-3 py-2"
-              onClick={() => void run(async () => { setProjects(await cloudListProjects()); })}>Actualiser</button>
-            {projects.length === 0 ? <p className="text-cream-2">Aucun projet dans le cloud.</p> : null}
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-bold">Mes projets cloud</p>
+              <button type="button" disabled={busy} className={buttonClass} onClick={() => void run(async () => { setProjects(await cloudListProjects()); })}>Actualiser</button>
+            </div>
+            {projects.length === 0 ? <p className="text-cream-2">Aucun projet sauvegardé dans ce compte.</p> : null}
             {projects.map((project) => (
               <div key={project.id} className="flex items-center justify-between gap-2 rounded-lg border border-line p-2">
-                <span className="min-w-0 flex-1 truncate">{project.title} · v{project.revision}</span>
-                <button type="button" disabled={busy || cloudSyncInProgress()}
-                  className="shrink-0 rounded-full border border-line px-3 py-2 font-bold disabled:opacity-40"
-                  onClick={() => {
-                    if (!window.confirm("Remplacer le projet ouvert sur cet appareil par cette sauvegarde cloud ? Exporte d'abord ta session locale si tu souhaites la conserver.")) return;
-                    void run(async () => {
-                      await cloudRestoreProject(project.id);
-                      toast.success("Projet restauré sur cet appareil");
-                    });
-                  }}>Restaurer</button>
+                <span className="min-w-0 flex-1 truncate">{project.title}</span>
+                <button type="button" disabled={working} className={buttonClass} onClick={() => void run(async () => {
+                  await cloudRestoreProject(project.id); toast.success("Projet et images récupérés. Tes autres projets locaux sont conservés.");
+                })}>Ouvrir</button>
               </div>
             ))}
           </div>
+          <details className="border-t border-line pt-3">
+            <summary className="cursor-pointer font-bold">Changer mon mot de passe</summary>
+            <form className="mt-3 space-y-2" onSubmit={(e) => {
+              e.preventDefault();
+              if (busy) return;
+              void run(async () => {
+                if (newPassword !== confirmPassword) throw new Error("Les deux mots de passe doivent être identiques.");
+                await cloudSetPassword(newPassword); setNewPassword(""); setConfirmPassword("");
+                setMessage("Mot de passe enregistré. Utilise-le sur tes autres appareils."); toast.success("Mot de passe enregistré");
+              });
+            }}>
+              <label className="block text-cream-2" htmlFor="cloud-password-create">Nouveau mot de passe</label>
+              <input id="cloud-password-create" type="password" autoComplete="new-password" required minLength={6} value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)} className={inputClass} placeholder="Au moins 6 caractères" />
+              <label className="block text-cream-2" htmlFor="cloud-password-confirm">Confirmer le mot de passe</label>
+              <input id="cloud-password-confirm" type="password" autoComplete="new-password" required minLength={6} value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)} className={inputClass} />
+              <button type="submit" disabled={busy || newPassword.length < 6 || newPassword !== confirmPassword} className={buttonClass}>Enregistrer mon mot de passe</button>
+            </form>
+          </details>
         </div>
       )}
-      {message ? <p role="status" className="mt-3 text-xs leading-relaxed text-cream-2">{message}</p> : null}
+      {message ? <p role="alert" className="mt-3 text-xs leading-relaxed text-cream-2">{message}</p> : null}
     </section>
   );
 }
