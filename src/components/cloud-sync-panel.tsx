@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   CLOUD_EVENT, cloudConsumeLoginRedirect, cloudIsSignedIn, cloudLink,
-  cloudListProjects, cloudRestoreProject, cloudSaveActiveProject, cloudSendLogin,
-  cloudSignOut, cloudSyncInProgress, cloudUser, cloudVerifyCode,
+  cloudListProjects, cloudRestoreProject, cloudSaveActiveProject,
+  cloudSetPassword, cloudSignInWithPassword, cloudSignOut, cloudSyncInProgress, cloudUser,
   type CloudProject,
 } from "@/lib/cloud";
 import { useStudio } from "@/lib/store";
@@ -11,7 +11,7 @@ import { useStudio } from "@/lib/store";
 export function CloudSyncPanel() {
   const activeId = useStudio((s) => s.activeProjectId);
   const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
   const [signedIn, setSignedIn] = useState(false);
   const [account, setAccount] = useState("");
   const [busy, setBusy] = useState(false);
@@ -62,24 +62,22 @@ export function CloudSyncPanel() {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
             placeholder="Courriel pour te connecter" />
-          <button type="button" disabled={busy || !email.includes("@")}
-            className="rounded-full border border-line px-3 py-2 text-xs font-bold disabled:opacity-40"
+          <label className="block text-xs text-cream-2" htmlFor="cloud-password-login">Mot de passe</label>
+          <input id="cloud-password-login" type="password" autoComplete="current-password" value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
+            placeholder="Ton mot de passe" />
+          <button type="button" disabled={busy || !email.includes("@") || !password}
+            className="rounded-full border border-line bg-panel-2 px-3 py-2 text-xs font-bold disabled:opacity-40"
             onClick={() => void run(async () => {
-              await cloudSendLogin(email);
-              setMessage("Courriel envoyé. Ouvre le lien de connexion reçu ou saisis le code si le message en contient un.");
-            })}>Recevoir un lien de connexion</button>
-          <label className="block text-xs text-cream-2" htmlFor="cloud-code">Code de vérification (si reçu)</label>
-          <div className="flex gap-2">
-            <input id="cloud-code" value={code} onChange={(e) => setCode(e.target.value)}
-              autoComplete="one-time-code" inputMode="numeric"
-              className="min-w-0 flex-1 rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
-              placeholder="Code reçu par courriel" />
-            <button type="button" disabled={busy || !code.trim() || !email.includes("@")}
-              className="rounded-full border border-line px-3 py-2 text-xs font-bold disabled:opacity-40"
-              onClick={() => void run(async () => { await cloudVerifyCode(email, code); setCode(""); })}>
-              Valider
-            </button>
-          </div>
+              await cloudSignInWithPassword(email, password);
+              setPassword("");
+              toast.success("Connecté à tes projets cloud");
+            })}>Se connecter</button>
+          <p className="text-[12px] leading-relaxed text-cream-2">
+            Pas de courriel ni de code à recevoir. Pour la première connexion,
+            crée ton mot de passe depuis le navigateur déjà connecté.
+          </p>
         </div>
       ) : (
         <div className="space-y-3 text-xs">
@@ -87,6 +85,23 @@ export function CloudSyncPanel() {
             <span className="min-w-0 truncate text-cream-2">{account || "Connecté à Supabase"}</span>
             <button type="button" className="shrink-0 rounded-full border border-line px-3 py-2"
               onClick={() => { cloudSignOut(); void refresh(); }}>Déconnexion</button>
+          </div>
+          <div className="space-y-2 rounded-lg border border-line p-3">
+            <p className="font-bold">Accès simple depuis tous tes navigateurs</p>
+            <p className="text-cream-2">Choisis ton mot de passe une seule fois ici. Dans l'autre navigateur, utilise simplement ton courriel et ce mot de passe. Aucun code à recevoir.</p>
+            <label className="block text-cream-2" htmlFor="cloud-password-create">Créer ou changer mon mot de passe</label>
+            <input id="cloud-password-create" type="password" autoComplete="new-password" value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full rounded-lg border border-line bg-panel-2 p-2 text-sm text-cream"
+              placeholder="Au moins 6 caractères" />
+            <button type="button" disabled={busy || password.length < 6}
+              className="rounded-full border border-line bg-panel-2 px-3 py-2 font-bold disabled:opacity-40"
+              onClick={() => void run(async () => {
+                await cloudSetPassword(password);
+                setPassword("");
+                setMessage("Mot de passe enregistré. Tu peux ouvrir StoryForge dans ton autre navigateur et te connecter directement.");
+                toast.success("Mot de passe enregistré");
+              })}>Enregistrer mon mot de passe</button>
           </div>
           <p className="text-cream-2">
             {linked ? "Synchronisation automatique activée pour le projet ouvert." :
