@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { chromium } from "playwright";
 const base = process.env.STORYFORGE_TEST_URL || "http://127.0.0.1:8080";
 assert.ok(["localhost", "127.0.0.1"].includes(new URL(base).hostname), "Run only against the local branch build");
@@ -140,7 +141,9 @@ try {
   assert.equal(await b.page.locator("#personnages article").first().getByLabel("Nom", { exact: true }).inputValue(), "A vers B");
   for (const section of ["#personnages", "#gardiens"]) {
     const images = b.page.locator(section + " article img");
-    assert.equal(await images.count(), section === "#personnages" ? 3 : 2, "Built-in references remain visible after cloud restoration");
+    const expectedCount = section === "#personnages" ? 3 : 2;
+    await images.nth(expectedCount - 1).waitFor();
+    assert.equal(await images.count(), expectedCount, "Built-in references remain visible after cloud restoration");
     for (const img of await images.all()) await img.evaluate(img => img.decode());
   }
   assert.equal(await b.page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false);
@@ -149,7 +152,7 @@ try {
 
   await a.page.goto(base + "/donnees");
   await panel(a.page).getByText("Changer mon mot de passe", { exact: true }).click();
-  const newPassword = account.password + "-new";
+  const newPassword = "StoryForge-QA-" + randomUUID();
   await panel(a.page).getByLabel("Nouveau mot de passe", { exact: true }).fill(newPassword);
   await panel(a.page).getByLabel("Confirmer le mot de passe", { exact: true }).fill(newPassword);
   await panel(a.page).getByRole("button", { name: "Enregistrer mon mot de passe", exact: true }).click();
@@ -172,6 +175,7 @@ try {
   pass("Real password change, server sign-out and sign-in from the second browser, without emails");
 
   await a.page.goto(base + "/bibliotheque");
+  await a.page.locator("#personnages article").first().getByLabel("Description", { exact: true }).waitFor();
   await a.context.setOffline(true);
   await a.page.locator("#personnages article").first().getByLabel("Description", { exact: true }).fill("Modification conservée hors ligne");
   await a.page.waitForFunction(() => JSON.parse(localStorage.getItem("sf46-seed"))?.personnages[0].note === "Modification conservée hors ligne");

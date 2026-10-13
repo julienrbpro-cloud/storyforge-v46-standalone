@@ -2,7 +2,8 @@ import { blobToDataUrl, dbAll, imageExt, referencedMediaIds, type MediaRecord } 
 import { parseSession } from "./session";
 import { useStudio } from "./store";
 import { LS_PROJECTS } from "./constants";
-import { storyCases } from "./sequence";
+import { migrateProductionNotes, storyCases } from "./sequence";
+import { normalizeMeta, parseSeed } from "./seed";
 import type { Seed } from "./types";
 
 const URL_BASE = "https://zqwsqblhnhemamppaoss.supabase.co";
@@ -15,7 +16,7 @@ export const CLOUD_EVENT = "storyforge:cloud-changed";
 
 type AuthTokens = { access_token: string; refresh_token: string; expires_at: number };
 type TokenResponse = { access_token: string; refresh_token: string; expires_in?: number; expires_at?: number };
-type Link = { id: string; revision: number; ownerId?: string; baseline?: string };
+type Link = { id: string; revision: number; ownerId?: string; baseline?: string; pending?: boolean; outgoing?: string };
 type MediaManifest = Omit<MediaRecord, "blob"> & { storage_path: string; content_sha256?: string };
 type CloudSnapshot = { format: "storyforge-cloud-v1"; seed: unknown; meta: unknown; media_meta: unknown; media: MediaManifest[] };
 export type CloudProject = { id: string; title: string; revision: number; updated_at: string; snapshot?: CloudSnapshot };
@@ -176,8 +177,23 @@ function stable(value: unknown): unknown {
 }
 async function fingerprint(seed: unknown, meta: unknown, media_meta: unknown, records: MediaRecord[]) {
   const media = await Promise.all(records.map(async ({ blob, ...record }) => ({ ...record, hash: await mediaFingerprint(blob) })));
+  return fingerprintParts(seed, meta, media_meta, media);
+}
+async function fingerprintParts(seed: unknown, meta: unknown, media_meta: unknown, media: Array<{ id: string; hash: string }>) {
   media.sort((a, b) => a.id.localeCompare(b.id));
   return sha256(new TextEncoder().encode(JSON.stringify(stable({ seed, meta, media_meta, media }))));
+}
+async function snapshotFingerprint(snapshot?: CloudSnapshot, normalize = false) {
+  if (snapshot?.format !== "storyforge-cloud-v1" || !Array.isArray(snapshot.media) ||
+      snapshot.media.some(r => !r.content_sha256)) return null;
+  const media = snapshot.media.map(({ storage_path: _path, content_sha256, ...record }) => {
+    void _path;
+    return { ...record, hash: content_sha256! };
+  });
+  const seed = normalize ? parseSeed(snapshot.seed) : snapshot.seed;
+  const meta = normalize ? normalizeMeta(snapshot.meta) : snapshot.meta;
+  if (normalize) migrateProductionNotes(seed as Seed, meta as ReturnType<typeof normalizeMeta>);
+  return fingerprintParts(seed, meta, snapshot.media_meta, media);
 }
 async function capture() {
   const state = useStudio.getState();
@@ -235,11 +251,15 @@ async function manualOperation(action: () => Promise<void>): Promise<void> {
   while (running) { try { await running; } catch { /* The requested action can resolve the prior error. */ } }
   return operation(action);
 }
-async function remoteProject(id: string, includeSnapshot = false) {
+async function findRemoteProject(id: string, includeSnapshot = false) {
   const rows = await rest("storyforge_projects?id=eq." + encodeURIComponent(id) +
     "&select=id,title,revision,updated_at" + (includeSnapshot ? ",snapshot" : "")) as CloudProject[];
-  if (!rows?.[0]) throw new Error("Ce projet cloud n’est pas accessible depuis ce compte. Tes données locales sont conservées.");
-  return rows[0];
+  return rows?.[0] || null;
+}
+async function remoteProject(id: string, includeSnapshot = false) {
+  const project = await findRemoteProject(id, includeSnapshot);
+  if (!project) throw new Error("Ce projet cloud n’est pas accessible depuis ce compte. Tes données locales sont conservées.");
+  return project;
 }
 async function download(project: CloudProject, userId: string) {
   const snap = project.snapshot;
@@ -280,29 +300,52 @@ async function applyDownloaded(project: CloudProject, userId: string, localId: s
 }
 async function syncActive(create: boolean, asCopy = false) {
   const local = await capture();
-  const previous = asCopy ? null : cloudLink(local.localId);
+  let previous = asCopy ? null : cloudLink(local.localId);
   if (!previous && !create) return;
   const user = await cloudUser();
   if (previous?.ownerId && previous.ownerId !== user.id) throw new Error("Ce projet est lié à un autre compte cloud.");
-  if (previous) {
+  // Retain a creation ID before sending anything. A lost POST reply must not create a second project.
+  if (previous?.pending) {
+    const committed = await findRemoteProject(previous.id, true);
+    if (committed) {
+      if (await snapshotFingerprint(committed.snapshot) !== previous.baseline)
+        throw new Error("Conflit : la sauvegarde cloud diffère de l’envoi interrompu. Tes modifications locales sont conservées. Ouvre la version cloud pour garder les deux copies.");
+      previous = { ...previous, revision: committed.revision, pending: false };
+      saveLink(local.localId, previous);
+    }
+  }
+  if (previous && !previous.pending) {
     const remote = await remoteProject(previous.id);
     if (remote.revision !== previous.revision) {
-      if (previous.baseline && local.baseline === previous.baseline) {
-        await applyDownloaded(await remoteProject(previous.id, true), user.id, local.localId,
-          { activeId: local.localId, revision: local.revision, keepView: true });
+      const latest = await remoteProject(previous.id, true);
+      // A committed PATCH can also lose its reply. A matching snapshot acknowledges that write.
+      const remoteBaseline = await snapshotFingerprint(latest.snapshot);
+      if (remoteBaseline === local.baseline) {
+        saveLink(local.localId, { id: latest.id, revision: latest.revision, ownerId: user.id, baseline: local.baseline });
+        status(local.localId, { state: "synced", message: "Projet et images à jour" });
         return;
       }
-      throw new Error("Conflit : des modifications existent sur deux appareils. Ouvre la version cloud pour conserver aussi une copie de tes changements locaux, ou sauvegarde ta version comme autre projet.");
+      if (previous.outgoing && remoteBaseline === previous.outgoing) {
+        previous = { id: latest.id, revision: latest.revision, ownerId: user.id, baseline: remoteBaseline };
+        saveLink(local.localId, previous);
+      } else if (previous.baseline && local.baseline === previous.baseline) {
+        await applyDownloaded(latest, user.id, local.localId,
+          { activeId: local.localId, revision: local.revision, keepView: true });
+        return;
+      } else throw new Error("Conflit : des modifications existent sur deux appareils. Ouvre la version cloud pour conserver aussi une copie de tes changements locaux, ou sauvegarde ta version comme autre projet.");
     }
     if (previous.baseline === local.baseline) { status(local.localId, { state: "synced", message: "Projet et images à jour" }); return; }
   }
   const id = previous?.id || crypto.randomUUID();
+  const updating = !!previous && !previous.pending;
+  if (!updating) saveLink(local.localId, { id, revision: 0, ownerId: user.id, baseline: local.baseline, pending: true });
   const media = await uploadMedia(user.id, id, local.records);
   if (await cloudUser().then(u => u.id) !== user.id) throw new Error("Le compte cloud a changé. Le projet n’a pas été envoyé.");
   const snapshot: CloudSnapshot = { format: "storyforge-cloud-v1", seed: local.seed, meta: local.meta, media_meta: local.media_meta, media };
-  const rows = await rest(previous ? "storyforge_projects?id=eq." + encodeURIComponent(id) + "&revision=eq." + previous.revision + "&select=id,revision" : "storyforge_projects?select=id,revision", {
-    method: previous ? "PATCH" : "POST", headers: { Prefer: "return=representation" },
-    body: JSON.stringify({ ...(previous ? { revision: previous.revision + 1, updated_at: new Date().toISOString() } : { id }), title: local.seed.projet.titre, snapshot }),
+  if (updating) saveLink(local.localId, { ...previous!, outgoing: local.baseline });
+  const rows = await rest(updating ? "storyforge_projects?id=eq." + encodeURIComponent(id) + "&revision=eq." + previous!.revision + "&select=id,revision" : "storyforge_projects?select=id,revision", {
+    method: updating ? "PATCH" : "POST", headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ ...(updating ? { revision: previous!.revision + 1, updated_at: new Date().toISOString() } : { id }), title: local.seed.projet.titre, snapshot }),
   }) as Array<{ id: string; revision: number }>;
   if (!rows?.[0]) throw new Error("Conflit : le projet a changé pendant l’envoi. Tes modifications locales sont conservées. Ouvre la version cloud pour garder les deux copies.");
   saveLink(local.localId, { ...rows[0], ownerId: user.id, baseline: local.baseline });
@@ -323,14 +366,17 @@ export function cloudRestoreProject(cloudId: string): Promise<void> {
     const match = Object.entries(readLinks()).find(([, l]) => l.id === cloudId && (!l.ownerId || l.ownerId === user.id));
     const localId = match?.[0] || "cloud-" + cloudId;
     let keepExisting = false;
-    if (match) {
-      if (localId === state.activeProjectId) keepExisting = (await capture()).baseline !== match[1].baseline;
+    // If link metadata was lost, compare against the snapshot itself before replacing a local project.
+    const baseline = match?.[1].baseline ?? await snapshotFingerprint(project.snapshot, true);
+    if (match?.[1].pending) keepExisting = true;
+    else {
+      if (localId === state.activeProjectId) keepExisting = (await capture()).baseline !== baseline;
       else {
         const archive = storageRead<{ projects: Array<{ id: string; seed: Seed; meta: unknown; mediaMeta: unknown }> }>(LS_PROJECTS, { projects: [] });
         const old = archive.projects.find(p => p.id === localId);
         if (old) {
           const ids = referencedMediaIds(old.seed);
-          keepExisting = await fingerprint(old.seed, old.meta, old.mediaMeta, (await dbAll()).filter(r => ids.has(r.id))) !== match[1].baseline;
+          keepExisting = await fingerprint(old.seed, old.meta, old.mediaMeta, (await dbAll()).filter(r => ids.has(r.id))) !== baseline;
         }
       }
     }
